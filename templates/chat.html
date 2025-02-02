@@ -665,95 +665,72 @@
             }
         });
 
-        // Handle form submission
-        document.getElementById('submit').addEventListener('click', async () => {
-            const query = document.getElementById('query').value.trim();
-            if (!query) return;
-
+        async function sendMessage() {
+            const messageInput = document.getElementById('query');
+            const message = messageInput.value.trim();
+            
+            if (message === '') return;
+            
+            // Clear input
+            messageInput.value = '';
+            
+            // Add user message to chat
             const chatMessages = document.getElementById('chat-messages');
-            const submitButton = document.getElementById('submit');
+            const userMessage = createMessageElement(message, true);
+            chatMessages.appendChild(userMessage);
             
-            // Add user message
-            chatMessages.appendChild(createMessageElement(query, true));
-            
-            // Clear input and scroll to bottom
-            document.getElementById('query').value = '';
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-
-            // Disable button and show loading state
-            submitButton.disabled = true;
-            submitButton.innerHTML = `
-                <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S16.627 0 8 0z"></path>
-                </svg>
-            `;
-
             try {
                 const response = await fetch('/query', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query })
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ prompt: message })
                 });
-
-                if (!response.ok) throw new Error('Failed to get response');
-
-                const assistantMessage = createMessageElement('', false);
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to get response');
+                }
+                
+                const data = await response.json();
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // Add AI response to chat
+                const assistantMessage = createMessageElement(data.response, false);
                 chatMessages.appendChild(assistantMessage);
-                const assistantContent = assistantMessage.querySelector('.message-content');
-
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                let fullResponse = '';
-
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
-                    
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            try {
-                                const data = JSON.parse(line.slice(6));
-                                if (data.response) {
-                                    fullResponse += data.response;
-                                    assistantContent.innerHTML = marked.parse(fullResponse);
-                                    assistantContent.querySelectorAll('pre code').forEach((block) => {
-                                        hljs.highlightElement(block);
-                                    });
-                                    chatMessages.scrollTop = chatMessages.scrollHeight;
-                                }
-                            } catch (e) {
-                                console.error('Error parsing SSE data:', e);
-                            }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                // Show error message in chat
+                const errorMessage = createMessageElement(`Error: ${error.message}. Please try again or refresh the page.`, false);
+                chatMessages.appendChild(errorMessage);
+                
+                // If it's a connection error, check if we need to switch protocols
+                if (error.message.includes('Failed to connect') || error.message.includes('network error')) {
+                    if (window.location.protocol === 'https:') {
+                        if (confirm('There seems to be a connection issue. Would you like to try switching to HTTP?')) {
+                            window.location.href = window.location.href.replace('https:', 'http:');
+                            return;
                         }
                     }
                 }
-
-                // Reload chat history after response
-                setTimeout(loadChatHistory, 1000);
-            } catch (error) {
-                console.error('Error:', error);
-                const errorMessage = createMessageElement(`Error: ${error.message}`, false);
-                chatMessages.appendChild(errorMessage);
-            } finally {
-                // Reset button state
-                submitButton.disabled = false;
-                submitButton.innerHTML = `
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
-                    </svg>
-                `;
             }
-        });
+            
+            // Scroll to bottom
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // Handle form submission
+        document.getElementById('submit').addEventListener('click', sendMessage);
 
         // Handle Enter key to submit
         document.getElementById('query').addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                document.getElementById('submit').click();
+                sendMessage();
             }
         });
 

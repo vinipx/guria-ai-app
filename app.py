@@ -27,7 +27,7 @@ app.jinja_loader = ChoiceLoader([
 app.secret_key = os.urandom(24)  # Required for session management
 load_dotenv()
 
-OLLAMA_BASE_URL = "http://localhost:11434"
+OLLAMA_BASE_URL = "http://localhost:11434"  # Always use HTTP for Ollama
 
 MODEL_SPECS = {
     "deepseek-r1:7b": {
@@ -46,41 +46,22 @@ MODEL_SPECS = {
 
 def check_ollama_status():
     """Check if Ollama service is running and accessible"""
-    global OLLAMA_BASE_URL
-    
     try:
         logger.info("Checking Ollama service status...")
+        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags")
         
-        # First try HTTPS if we're running in HTTPS mode
-        if os.path.exists(os.path.join(os.path.dirname(__file__), 'ssl', 'cert.pem')):
-            try:
-                logger.info("Trying HTTPS connection to Ollama...")
-                response = requests.get("https://localhost:11434/api/tags", verify=False)
-                if response.status_code == 200:
-                    OLLAMA_BASE_URL = "https://localhost:11434"
-                    models = response.json().get('models', [])
-                    logger.info(f"Ollama service is running over HTTPS. Available models: {[m['name'] for m in models]}")
-                    return True, None
-            except Exception as e:
-                logger.warning(f"HTTPS connection failed: {str(e)}")
-        
-        # Fallback to HTTP
-        try:
-            logger.info("Trying HTTP connection to Ollama...")
-            response = requests.get("http://localhost:11434/api/tags")
-            if response.status_code == 200:
-                OLLAMA_BASE_URL = "http://localhost:11434"
-                models = response.json().get('models', [])
-                logger.info(f"Ollama service is running over HTTP. Available models: {[m['name'] for m in models]}")
-                return True, None
-            else:
-                error_msg = f"Ollama service returned status code {response.status_code}"
-                logger.error(error_msg)
-                return False, error_msg
-        except requests.exceptions.ConnectionError:
-            error_msg = "Could not connect to Ollama service. Is it running?"
+        if response.status_code == 200:
+            models = response.json().get('models', [])
+            logger.info(f"Ollama service is running. Available models: {[m['name'] for m in models]}")
+            return True, None
+        else:
+            error_msg = f"Ollama service returned status code {response.status_code}"
             logger.error(error_msg)
             return False, error_msg
+    except requests.exceptions.ConnectionError:
+        error_msg = "Could not connect to Ollama service. Is it running?"
+        logger.error(error_msg)
+        return False, error_msg
     except Exception as e:
         error_msg = f"Error checking Ollama status: {str(e)}"
         logger.error(error_msg)
@@ -157,45 +138,67 @@ def initialize_model():
 
 @app.route('/query', methods=['POST'])
 def query():
-    data = request.json
-    model = session.get('model')
-    user_input = data.get('query', '')
-
-    if not model:
-        return jsonify({"error": "No model selected"}), 400
-
-    if not user_input:
-        return jsonify({"error": "No query provided"}), 400
-
     try:
-        response = requests.post(
-            f"{OLLAMA_BASE_URL}/api/generate",
-            json={
-                "model": model,
-                "prompt": user_input,
-                "stream": True
-            },
-            stream=True,
-            verify=False
-        )
+        data = request.get_json()
+        if not data or 'prompt' not in data:
+            return jsonify({"error": "No prompt provided"}), 400
 
-        def generate():
-            for line in response.iter_lines():
-                if line:
-                    try:
-                        json_response = json.loads(line)
-                        if 'response' in json_response:
-                            yield f"data: {json.dumps({'text': json_response['response']})}\n\n"
-                        if json_response.get('done', False):
-                            # Save the complete chat to database
-                            save_chat(model, user_input, json_response.get('context', ''))
-                            break
-                    except json.JSONDecodeError:
-                        continue
+        model = session.get('model')
+        if not model:
+            return jsonify({"error": "No model selected"}), 400
 
-        return Response(generate(), mimetype='text/event-stream')
+        prompt = data['prompt']
+        logger.info(f"Sending query to model {model}: {prompt[:50]}...")
+
+        # Check Ollama connection first
+        ollama_status, error = check_ollama_status()
+        if not ollama_status:
+            return jsonify({"error": f"Ollama service not available: {error}"}), 503
+
+        try:
+            response = requests.post(
+                f"{OLLAMA_BASE_URL}/api/generate",
+                json={
+                    "model": model,
+                    "prompt": prompt,
+                    "stream": False
+                },
+                timeout=30  # Add timeout
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                response_text = result.get('response', '')
+                
+                # Save to database
+                try:
+                    save_chat(model, prompt, response_text)
+                except Exception as e:
+                    logger.error(f"Error saving chat: {str(e)}")
+                
+                return jsonify({"response": response_text})
+            else:
+                error_msg = f"Ollama returned status code {response.status_code}"
+                logger.error(error_msg)
+                return jsonify({"error": error_msg}), response.status_code
+                
+        except requests.exceptions.Timeout:
+            error_msg = "Request to Ollama timed out"
+            logger.error(error_msg)
+            return jsonify({"error": error_msg}), 504
+        except requests.exceptions.ConnectionError:
+            error_msg = "Failed to connect to Ollama service"
+            logger.error(error_msg)
+            return jsonify({"error": error_msg}), 503
+        except Exception as e:
+            error_msg = f"Error generating response: {str(e)}"
+            logger.error(error_msg)
+            return jsonify({"error": error_msg}), 500
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        error_msg = f"Server error: {str(e)}"
+        logger.error(error_msg)
+        return jsonify({"error": error_msg}), 500
 
 @app.route('/chat_history')
 def chat_history():
@@ -633,7 +636,7 @@ def initialize_ollama_model(model_name):
     """Initialize and pull the model if not already available"""
     try:
         # Check if model exists
-        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", verify=False)
+        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags")
         if response.status_code == 200:
             models = response.json().get('models', [])
             model_exists = any(m['name'] == model_name for m in models)
@@ -643,7 +646,6 @@ def initialize_ollama_model(model_name):
                 response = requests.post(
                     f"{OLLAMA_BASE_URL}/api/pull",
                     json={"name": model_name},
-                    verify=False
                 )
                 if response.status_code != 200:
                     raise Exception(f"Failed to pull model: {response.text}")
@@ -656,7 +658,6 @@ def initialize_ollama_model(model_name):
                 "prompt": "Hello",
                 "stream": False
             },
-            verify=False
         )
         
         if response.status_code != 200:
