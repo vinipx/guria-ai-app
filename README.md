@@ -114,6 +114,10 @@ guria-ai-app/
 └── README.md         # This file
 ```
 
+## 👨‍💻 Authors
+
+Vinicius Peixoto Fagundes - [@vinipx](https://github.com/vinipx)
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
@@ -128,7 +132,7 @@ Contributions are welcome! Please feel free to submit a Pull Request. For major 
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## 🙏 Acknowledgements
 
 - [Ollama](https://ollama.ai/) for providing the amazing AI models
 - [Flask](https://flask.palletsprojects.com/) for the web framework
@@ -136,12 +140,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📧 Contact
 
-Vinicius Peixoto - [@vinipx](https://github.com/vinipx)
+Vinicius Peixoto Fagundes - [@vinipx](https://github.com/vinipx)
 
 Project Link: [https://github.com/vinipx/guria-ai-app](https://github.com/vinipx/guria-ai-app)
 
 ---
 
 <div align="center">
-  <sub>Built with ❤️ by <a href="https://github.com/vinipx">Vinicius Peixoto</a></sub>
+  <sub>Built with ❤️ by <a href="https://github.com/vinipx">Vinicius Peixoto Fagundes</a></sub>
 </div>
