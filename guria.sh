@@ -162,75 +162,268 @@ install_dependencies() {
     return 0
 }
 
-# Function to check and stop running instances
-check_and_stop_instances() {
-    local stopped_something=0
+# Function to find all Ollama-related processes with PIDs and process info
+find_ollama_processes_info() {
+    # Get detailed process info including parent PIDs and command
+    ps aux | grep -E '[o]llama' || true
+}
+
+# Function to find just Ollama PIDs
+find_ollama_pids() {
+    ps aux | grep -E '[o]llama' | awk '{print $2}' || true
+}
+
+# Function to stop Ollama.app and its processes
+stop_ollama() {
+    echo -e "${YELLOW}Attempting to stop Ollama...${NC}"
     
-    # First check for any running Guria processes
-    print_step "Checking for running Guria instances..."
-    local guria_pids=$(pgrep -f "python.*app.py.*guria")
-    
-    if [ ! -z "$guria_pids" ]; then
-        print_warning "Found running Guria instances. Stopping them..."
-        echo "$guria_pids" | while read -r pid; do
-            kill -15 "$pid" 2>/dev/null
-            if [ $? -eq 0 ]; then
-                print_success "Stopped Guria process (PID: $pid)"
-                stopped_something=1
-            else
-                print_error "Failed to stop Guria process (PID: $pid)"
-            fi
-        done
+    # First, try to quit Ollama.app if it's running
+    if pgrep -f "Ollama.app" >/dev/null; then
+        echo -e "${YELLOW}Found Ollama.app, attempting to quit...${NC}"
+        osascript -e 'tell application "Ollama" to quit' 2>/dev/null || true
         sleep 2
     fi
     
-    # Then check if port 5000 is in use
-    if lsof -i:5000 > /dev/null 2>&1; then
-        print_warning "Port 5000 is in use. Checking process..."
-        local port_pid=$(lsof -t -i:5000 2>/dev/null)
+    # Try graceful shutdown via API
+    if curl -s -X POST "http://localhost:11434/api/shutdown" >/dev/null 2>&1; then
+        echo -e "${GREEN}Sent shutdown request to Ollama API${NC}"
+        sleep 3
+    fi
+    
+    # Get all Ollama-related processes
+    local OLLAMA_PROCESSES=$(ps aux | grep -E "Ollama.app|ollama serve" | grep -v grep || true)
+    
+    if [ ! -z "$OLLAMA_PROCESSES" ]; then
+        echo -e "${YELLOW}Current Ollama processes:${NC}"
+        echo "$OLLAMA_PROCESSES"
         
-        if [ ! -z "$port_pid" ]; then
-            # Check if it's a Guria process
-            if ps -p "$port_pid" -o command= | grep -q "guria"; then
-                print_warning "Port 5000 is used by another Guria instance. Stopping it..."
-                kill -15 "$port_pid" 2>/dev/null
+        # Get parent process first (Ollama.app)
+        local PARENT_PID=$(echo "$OLLAMA_PROCESSES" | grep "Ollama.app" | grep -v "Resources" | awk '{print $2}' || true)
+        
+        # Get child processes (ollama serve)
+        local CHILD_PIDS=$(echo "$OLLAMA_PROCESSES" | grep "ollama serve" | awk '{print $2}' || true)
+        
+        # Try to stop parent process first
+        if [ ! -z "$PARENT_PID" ]; then
+            echo -e "${YELLOW}Stopping Ollama.app (PID: $PARENT_PID)...${NC}"
+            sudo kill -15 "$PARENT_PID" 2>/dev/null || true
+            sleep 2
+        fi
+        
+        # Check if processes are still running
+        OLLAMA_PROCESSES=$(ps aux | grep -E "Ollama.app|ollama serve" | grep -v grep || true)
+        if [ ! -z "$OLLAMA_PROCESSES" ]; then
+            echo -e "${YELLOW}Some processes still running, using force kill...${NC}"
+            
+            # Force kill all remaining processes
+            echo "$OLLAMA_PROCESSES" | awk '{print $2}' | while read -r pid; do
+                echo -e "${YELLOW}Force killing PID: $pid${NC}"
+                sudo kill -9 "$pid" 2>/dev/null || true
+            done
+            sleep 2
+            
+            # If still running, try pkill with sudo
+            OLLAMA_PROCESSES=$(ps aux | grep -E "Ollama.app|ollama serve" | grep -v grep || true)
+            if [ ! -z "$OLLAMA_PROCESSES" ]; then
+                echo -e "${YELLOW}Using pkill as last resort...${NC}"
+                sudo pkill -9 -f "Ollama.app" || true
+                sudo pkill -9 ollama || true
                 sleep 2
-                if lsof -i:5000 > /dev/null 2>&1; then
-                    print_error "Failed to stop Guria process on port 5000"
-                    print_step "Using a different port..."
-                    export FLASK_RUN_PORT=5001
-                else
-                    print_success "Successfully stopped Guria process on port 5000"
-                    stopped_something=1
-                fi
-            else
-                # If it's not a Guria process, just use a different port
-                print_warning "Port 5000 is used by another application"
-                print_step "Using port 5001 instead..."
-                export FLASK_RUN_PORT=5001
             fi
         fi
     fi
     
-    # If we stopped anything, wait a moment to ensure ports are freed
-    if [ $stopped_something -eq 1 ]; then
-        print_step "Waiting for processes to fully stop..."
-        sleep 3
+    # Final check
+    if ! pgrep -f "Ollama.app" >/dev/null && ! pgrep -f "ollama serve" >/dev/null; then
+        echo -e "${GREEN}All Ollama processes stopped${NC}"
+        
+        # Clean up port 11434 if still in use
+        local PORT_PID=$(lsof -i :11434 -t 2>/dev/null || true)
+        if [ ! -z "$PORT_PID" ]; then
+            echo -e "${YELLOW}Cleaning up port 11434...${NC}"
+            sudo kill -9 $PORT_PID 2>/dev/null || true
+        fi
+        
+        return 0
+    else
+        echo -e "${RED}Failed to stop all Ollama processes. Current processes:${NC}"
+        ps aux | grep -E "Ollama.app|ollama serve" | grep -v grep || true
+        echo -e "${YELLOW}Please try closing Ollama.app manually and then run:${NC}"
+        echo -e "${YELLOW}sudo pkill -9 -f Ollama.app${NC}"
+        echo -e "${YELLOW}sudo pkill -9 ollama${NC}"
+        return 1
+    fi
+}
+
+# Function to stop all running instances
+stop_instances() {
+    echo -e "${BLUE}Stopping GURIA and Ollama...${NC}"
+    local failed=0
+    
+    # Stop GURIA server first
+    local GURIA_PIDS=$(ps aux | grep "[p]ython.*app.py" | awk '{print $2}')
+    if [ ! -z "$GURIA_PIDS" ]; then
+        echo -e "${YELLOW}Stopping GURIA server...${NC}"
+        echo "$GURIA_PIDS" | while read -r pid; do
+            kill -9 "$pid" 2>/dev/null || true
+        done
+    fi
+    
+    # Check if GURIA processes are still running
+    sleep 1
+    if pgrep -f "python.*app.py" >/dev/null; then
+        echo -e "${RED}Failed to stop GURIA server${NC}"
+        failed=1
+    else
+        echo -e "${GREEN}GURIA server stopped${NC}"
+    fi
+    
+    # Stop Ollama if running
+    if pgrep -f "Ollama.app" >/dev/null || pgrep -f "ollama serve" >/dev/null; then
+        if ! stop_ollama; then
+            failed=1
+        fi
+    fi
+    
+    if [ $failed -eq 1 ]; then
+        echo -e "${RED}Some processes could not be stopped${NC}"
+        return 1
+    else
+        echo -e "${GREEN}All processes successfully stopped${NC}"
+        sleep 2
+        return 0
+    fi
+}
+
+# Function to check and stop running instances
+check_and_stop_instances() {
+    # Check for running instances
+    if pgrep -f "python.*app.py" >/dev/null || pgrep -f "Ollama.app" >/dev/null || pgrep -f "ollama serve" >/dev/null; then
+        echo -e "${YELLOW}Found running instances of GURIA or Ollama${NC}"
+        if ! stop_instances; then
+            return 1
+        fi
+    fi
+    return 0
+}
+
+# Function to ensure Ollama is stopped
+ensure_ollama_stopped() {
+    local max_attempts=3
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        if pgrep -f "Ollama.app" >/dev/null || pgrep -f "ollama serve" >/dev/null; then
+            echo -e "${YELLOW}Attempt $attempt/$max_attempts to stop Ollama...${NC}"
+            
+            # Try to stop with sudo directly
+            sudo pkill -9 -f "Ollama.app" 2>/dev/null || true
+            sudo pkill -9 ollama 2>/dev/null || true
+            sleep 2
+            
+            if ! pgrep -f "Ollama.app" >/dev/null && ! pgrep -f "ollama serve" >/dev/null; then
+                echo -e "${GREEN}Ollama successfully stopped${NC}"
+                return 0
+            fi
+        else
+            echo -e "${GREEN}No Ollama processes found${NC}"
+            return 0
+        fi
+        
+        attempt=$((attempt + 1))
+    done
+    
+    echo -e "${RED}Failed to stop Ollama after $max_attempts attempts${NC}"
+    return 1
+}
+
+# Function to check if Ollama is running and responding
+check_ollama() {
+    # First check if process exists
+    if pgrep -f "Ollama.app" >/dev/null || pgrep -f "ollama serve" >/dev/null; then
+        return 0
+    fi
+    
+    # Then check if it's responding to API calls
+    if ! curl -s -f "http://localhost:11434/api/tags" >/dev/null 2>&1; then
+        return 2
     fi
     
     return 0
 }
 
-# Function to check Ollama service
-check_ollama() {
-    if ! curl -s http://localhost:11434/api/tags > /dev/null; then
-        print_warning "Ollama service is not running"
-        print_step "Please start Ollama first using:"
-        echo -e "${GREEN}${DIM}   ollama serve${NC}"
-        return 1
+# Function to start Ollama service
+start_ollama() {
+    echo -e "${BLUE}Starting Ollama service...${NC}"
+    
+    # Check if Ollama.app is installed
+    if [ -d "/Applications/Ollama.app" ]; then
+        echo -e "${YELLOW}Found Ollama.app, launching...${NC}"
+        open -a Ollama
+        
+        # Wait for the service to be ready
+        local max_attempts=30
+        local attempt=1
+        
+        while [ $attempt -le $max_attempts ]; do
+            echo -ne "${BLUE}Waiting for Ollama service to start... ($attempt/$max_attempts)${NC}\r"
+            
+            if curl -s -f "http://localhost:11434/api/tags" >/dev/null 2>&1; then
+                echo -e "\n${GREEN}Ollama service is now running${NC}"
+                return 0
+            fi
+            
+            sleep 1
+            attempt=$((attempt + 1))
+        done
+        
+        echo -e "\n${RED}Failed to start Ollama via app${NC}"
     fi
-    print_success "Ollama service is running"
-    return 0
+    
+    # If app launch failed or app not found, try CLI
+    echo -e "${YELLOW}Starting Ollama via command line...${NC}"
+    ollama serve >/dev/null 2>&1 &
+    
+    # Wait for the service to be ready
+    local max_attempts=30
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        echo -ne "${BLUE}Waiting for Ollama service to start... ($attempt/$max_attempts)${NC}\r"
+        
+        if curl -s -f "http://localhost:11434/api/tags" >/dev/null 2>&1; then
+            echo -e "\n${GREEN}Ollama service is now running${NC}"
+            return 0
+        fi
+        
+        sleep 1
+        attempt=$((attempt + 1))
+    done
+    
+    echo -e "\n${RED}Failed to start Ollama service${NC}"
+    return 1
+}
+
+# Function to ensure Ollama is running
+ensure_ollama_running() {
+    echo -e "${BLUE}Checking Ollama service...${NC}"
+    
+    # Check if service is responding
+    if curl -s -f "http://localhost:11434/api/tags" >/dev/null 2>&1; then
+        echo -e "${GREEN}Ollama service is already running${NC}"
+        return 0
+    fi
+    
+    # If not responding but processes exist, stop them
+    if pgrep -f "Ollama.app" >/dev/null || pgrep -f "ollama serve" >/dev/null; then
+        echo -e "${YELLOW}Found non-responding Ollama processes, restarting...${NC}"
+        stop_ollama
+        sleep 2
+    fi
+    
+    # Start Ollama
+    start_ollama
+    return $?
 }
 
 # Function to display shutdown message
@@ -266,10 +459,15 @@ echo -e "${YELLOW}${BOLD}Generative Understanding & Reasoning Intelligence Assis
 echo -e "${DIM}Version 1.0.0${NC}"
 echo ""
 
+print_header "Process Check"
+check_and_stop_instances || exit 1
+
 print_header "System Check"
 check_python_version || exit 1
 check_pip || exit 1
-check_ollama
+
+print_header "Ollama Service"
+ensure_ollama_running || exit 1
 
 print_header "Environment Setup"
 setup_venv || exit 1
@@ -413,7 +611,7 @@ check_and_kill_existing_process() {
         print_step "Stopping processes..."
         # Kill all processes using the port
         for pid in $pids; do
-            kill -9 $pid 2>/dev/null
+            kill -9 "$pid" 2>/dev/null
         done
         sleep 2
         
@@ -428,9 +626,6 @@ check_and_kill_existing_process() {
     fi
     return 0
 }
-
-# First, check and stop any running instances
-check_and_stop_instances || exit 1
 
 # Generate SSL certificates
 generate_ssl_certificate || exit 1

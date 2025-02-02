@@ -1,24 +1,29 @@
-from flask import Flask, render_template, request, jsonify, Response, session, redirect, url_for
+from flask import Flask, render_template, request, jsonify, Response, session, redirect, url_for, send_from_directory
 import requests
 import os
 import socket
-import psutil
-import signal
-from dotenv import load_dotenv
-import time
+import ssl
 import sys
-import subprocess
-from jinja2 import ChoiceLoader, FileSystemLoader
-import threading
 import json
-import sqlite3
+import time
+import signal
+import subprocess
+import threading
+import psutil
 from datetime import datetime
+from dotenv import load_dotenv
+from jinja2 import ChoiceLoader, FileSystemLoader
 import argparse
 import logging
+import webbrowser
+from flask_cors import CORS
+import sqlite3
+import markdown2
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+CORS(app)
 # Add support for components directory in templates
 app.jinja_loader = ChoiceLoader([
     FileSystemLoader('templates'),
@@ -293,51 +298,45 @@ def execute_shutdown():
         app.logger.error(f"Error during shutdown execution: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
+# Global flag for shutdown
+shutdown_flag = False
+
+def shutdown_server():
+    """Shutdown the Flask server."""
+    global shutdown_flag
+    shutdown_flag = True
+    # Get the process ID
+    pid = os.getpid()
+    # Use a background thread to kill the process
+    def kill_server():
+        time.sleep(1)  # Give time for the response to be sent
+        os.kill(pid, signal.SIGTERM)
+    threading.Thread(target=kill_server, daemon=True).start()
+
 @app.route('/shutdown', methods=['POST'])
 def shutdown():
-    """Shutdown the application and Ollama service"""
+    """Shutdown the server and stop Ollama service."""
     try:
-        # Get our process ID
-        pid = os.getpid()
+        # First, try to stop Ollama service
+        logger.info("Attempting to stop Ollama service...")
+        try:
+            requests.post('http://localhost:11434/api/shutdown')
+            logger.info("Ollama service shutdown request sent")
+        except Exception as e:
+            logger.warning(f"Error stopping Ollama service: {e}")
+
+        # Shutdown Flask server
+        logger.info("Shutting down Flask server...")
+        shutdown_server()
         
-        # Try to stop Ollama based on platform
-        if sys.platform == "win32":
-            # Windows
-            subprocess.run(['taskkill', '/F', '/IM', 'ollama.exe'], check=False)
-        else:
-            # Unix-like systems (macOS, Linux)
-            subprocess.run(['pkill', '-f', 'ollama'], check=False)
-        
-        # Clear the session
-        session.clear()
-        
-        # Send success response with redirect
-        response = jsonify({
-            "message": "Server shutting down...",
-            "redirect": url_for('goodbye')
+        return jsonify({
+            "status": "success",
+            "message": "Server is shutting down..."
         })
-        response.headers['Connection'] = 'close'
-        
-        # Define a function to kill this process
-        def kill_self():
-            time.sleep(2)  # Give more time for response to be sent
-            if sys.platform == "win32":
-                # Windows
-                os.kill(pid, signal.CTRL_C_EVENT)
-            else:
-                # Unix-like systems (macOS, Linux)
-                os.kill(pid, signal.SIGTERM)
-        
-        # Start a thread to kill the server
-        thread = threading.Thread(target=kill_self)
-        thread.daemon = True
-        thread.start()
-        
-        return response
-        
+    
     except Exception as e:
-        app.logger.error(f"Error during shutdown: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Error during shutdown: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/delete_chat', methods=['POST'])
 def delete_chat():
