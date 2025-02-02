@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>👩‍🤖 GURIA</h1>
+  <img src="static/images/logo.png" alt="GURIA Logo" width="300"/>
   <p><strong>Generative Understanding & Responsive Intelligent Assistant</strong></p>
   <p><i>A powerful and intuitive chat interface for Ollama models</i></p>
 
