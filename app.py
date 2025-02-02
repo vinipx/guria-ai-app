@@ -228,25 +228,112 @@ def clear_history():
     clear_chat_history()
     return jsonify({'status': 'success'})
 
+@app.route('/goodbye')
+def goodbye():
+    """Show goodbye page"""
+    return render_template('goodbye.html')
+
+@app.route('/api/shutdown', methods=['POST'])
+def initiate_shutdown():
+    """First step: Return redirect to goodbye page"""
+    try:
+        app.logger.info("Initiating shutdown process...")
+        redirect_url = url_for('goodbye')
+        app.logger.info(f"Redirecting to: {redirect_url}")
+        return jsonify({
+            "message": "Redirecting to goodbye page...",
+            "redirect": redirect_url
+        })
+    except Exception as e:
+        app.logger.error(f"Error during shutdown initiation: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/execute_shutdown', methods=['POST'])
+def execute_shutdown():
+    """Second step: Actually perform the shutdown"""
+    try:
+        app.logger.info("Executing shutdown...")
+        # Get our process ID
+        pid = os.getpid()
+        app.logger.info(f"Current process ID: {pid}")
+        
+        # Try to stop Ollama based on platform
+        if sys.platform == "win32":
+            app.logger.info("Stopping Ollama on Windows...")
+            # Windows
+            subprocess.run(['taskkill', '/F', '/IM', 'ollama.exe'], check=False)
+        else:
+            app.logger.info("Stopping Ollama on Unix-like system...")
+            # Unix-like systems (macOS, Linux)
+            subprocess.run(['pkill', '-f', 'ollama'], check=False)
+        
+        # Clear the session
+        session.clear()
+        app.logger.info("Session cleared")
+        
+        # Send success response
+        response = jsonify({"message": "Server shutting down..."})
+        response.headers['Connection'] = 'close'
+        app.logger.info("Shutdown response prepared")
+        
+        # Define a function to kill this process
+        def kill_self():
+            app.logger.info("Starting kill_self function...")
+            time.sleep(2)  # Give more time for response to be sent
+            app.logger.info("Executing kill command...")
+            if sys.platform == "win32":
+                # Windows
+                os.kill(pid, signal.CTRL_C_EVENT)
+            else:
+                # Unix-like systems (macOS, Linux)
+                os.kill(pid, signal.SIGTERM)
+        
+        # Start a thread to kill the server
+        thread = threading.Thread(target=kill_self)
+        thread.daemon = True
+        thread.start()
+        app.logger.info("Kill thread started")
+        
+        return response
+        
+    except Exception as e:
+        app.logger.error(f"Error during shutdown execution: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/shutdown', methods=['POST'])
 def shutdown():
+    """Shutdown the application and Ollama service"""
     try:
         # Get our process ID
         pid = os.getpid()
         
-        # Stop Ollama
-        subprocess.run(['pkill', '-f', 'ollama'], check=False)
+        # Try to stop Ollama based on platform
+        if sys.platform == "win32":
+            # Windows
+            subprocess.run(['taskkill', '/F', '/IM', 'ollama.exe'], check=False)
+        else:
+            # Unix-like systems (macOS, Linux)
+            subprocess.run(['pkill', '-f', 'ollama'], check=False)
         
         # Clear the session
         session.clear()
         
-        # Send success response before shutting down
-        response = jsonify({"message": "Server shutting down..."})
+        # Send success response with redirect
+        response = jsonify({
+            "message": "Server shutting down...",
+            "redirect": url_for('goodbye')
+        })
+        response.headers['Connection'] = 'close'
         
         # Define a function to kill this process
         def kill_self():
-            time.sleep(1)  # Give time for response to be sent
-            os.kill(pid, signal.SIGTERM)
+            time.sleep(2)  # Give more time for response to be sent
+            if sys.platform == "win32":
+                # Windows
+                os.kill(pid, signal.CTRL_C_EVENT)
+            else:
+                # Unix-like systems (macOS, Linux)
+                os.kill(pid, signal.SIGTERM)
         
         # Start a thread to kill the server
         thread = threading.Thread(target=kill_self)
@@ -256,6 +343,7 @@ def shutdown():
         return response
         
     except Exception as e:
+        app.logger.error(f"Error during shutdown: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/delete_chat', methods=['POST'])

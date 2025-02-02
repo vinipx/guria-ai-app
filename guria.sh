@@ -233,6 +233,22 @@ check_ollama() {
     return 0
 }
 
+# Function to display shutdown message
+display_shutdown_message() {
+    echo
+    echo "🌟 Thank you for using GURIA! 🌟"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "🔹 The application has been gracefully shutdown"
+    echo "🔹 All services have been stopped properly"
+    echo "🔹 Your chat history is safely stored"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "See you next time! 👋"
+    echo
+}
+
+# Trap SIGTERM and SIGINT
+trap 'display_shutdown_message' SIGTERM SIGINT
+
 # Get the directory where the script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 

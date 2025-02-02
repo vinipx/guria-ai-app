@@ -393,13 +393,11 @@
 
             <!-- Shutdown button at the bottom -->
             <div class="p-4 border-t border-chat-border">
-                <button id="shutdown" 
-                    onclick="fetch('/shutdown', { method: 'POST' }).then(() => window.close())"
-                    class="w-full bg-chat-accent hover:bg-chat-accent-hover text-black font-medium py-2 px-4 rounded-lg transition-all flex items-center justify-center gap-2">
+                <button onclick="shutdownApp()" class="w-full bg-chat-accent hover:bg-chat-accent-hover text-black font-semibold px-4 py-2 rounded-lg flex items-center justify-center space-x-2 transition-all duration-200">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"></path>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.636 5.636a9 9 0 1012.728 0M12 3v9"></path>
                     </svg>
-                    Shutdown Server
+                    <span>Shutdown</span>
                 </button>
             </div>
         </div>
@@ -409,37 +407,6 @@
             <!-- Chat messages -->
             <div class="flex-1 overflow-y-auto p-4" id="chat-messages">
                 <!-- Messages will be inserted here -->
-            </div>
-
-            <!-- Export button -->
-            <div class="fixed top-4 right-4">
-                <div class="export-container">
-                    <button class="export-btn" id="exportBtn">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                        </svg>
-                    </button>
-                    <div class="export-dropdown" id="exportDropdown">
-                        <div class="export-option" onclick="exportChat('txt')">
-                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            Text File (.txt)
-                        </div>
-                        <div class="export-option" onclick="exportChat('md')">
-                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                            </svg>
-                            Markdown (.md)
-                        </div>
-                        <div class="export-option" onclick="exportChat('pdf')">
-                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                            </svg>
-                            PDF Document (.pdf)
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <!-- Input area -->
@@ -467,6 +434,68 @@
     </div>
 
     <script>
+        async function shutdownApp() {
+            if (!confirm('Are you sure you want to shutdown GURIA? This will stop both the app and Ollama.')) {
+                return;
+            }
+
+            // Show shutdown in progress immediately
+            document.body.innerHTML = `
+                <div class="fixed inset-0 bg-chat-dark flex items-center justify-center">
+                    <div class="text-center p-8 bg-gray-800 rounded-xl shadow-2xl max-w-md mx-4">
+                        <svg class="w-16 h-16 mx-auto mb-6 text-chat-accent animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.636 5.636a9 9 0 1012.728 0M12 3v9"></path>
+                        </svg>
+                        <h1 class="text-3xl font-bold text-chat-accent mb-4">Shutting Down...</h1>
+                        <p class="text-gray-400 mb-8">GURIA is gracefully shutting down. Please wait...</p>
+                        <div class="text-sm text-gray-500">Thank you for using GURIA!</div>
+                    </div>
+                </div>
+            `;
+
+            try {
+                console.log('Initiating shutdown...');
+                const response = await fetch('/shutdown', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Shutdown response:', data);
+                    if (data.redirect) {
+                        console.log('Redirecting to:', data.redirect);
+                        // Wait a moment before redirecting to ensure the animation is seen
+                        setTimeout(() => {
+                            window.location.href = data.redirect;
+                        }, 1000);
+                    }
+                } else {
+                    throw new Error('Server responded with an error');
+                }
+            } catch (error) {
+                console.error('Shutdown error:', error);
+                // Show error message
+                document.body.innerHTML = `
+                    <div class="fixed inset-0 bg-chat-dark flex items-center justify-center">
+                        <div class="text-center p-8 bg-gray-800 rounded-xl shadow-2xl max-w-md mx-4">
+                            <svg class="w-16 h-16 mx-auto mb-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                            </svg>
+                            <h1 class="text-3xl font-bold text-red-500 mb-4">Shutdown Failed</h1>
+                            <p class="text-gray-400 mb-8">There was an error shutting down GURIA. Please try again or close the window manually.</p>
+                            <div class="text-sm text-gray-500 mb-4">Error: ${error.message}</div>
+                            <button onclick="window.location.reload()" class="bg-chat-accent hover:bg-chat-accent-hover text-black font-semibold px-6 py-3 rounded-lg transition-all duration-200">
+                                Try Again
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
         // Function to create a message element
         function createMessageElement(content, isUser = false) {
             const messageDiv = document.createElement('div');
@@ -656,7 +685,7 @@
             submitButton.innerHTML = `
                 <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S16.627 0 8 0z"></path>
                 </svg>
             `;
 
@@ -777,7 +806,7 @@
                     const response = await fetch('/export_pdf', {
                         method: 'POST',
                         headers: {
-                            'Content-Type': 'application/json',
+                            'Content-Type': 'application/json'
                         },
                         body: JSON.stringify({ content })
                     });
