@@ -610,8 +610,21 @@ def main():
     # Initialize the database
     init_db()
 
-    # Run the Flask app
-    app.run(host='0.0.0.0', port=port)
+    # SSL certificate paths
+    cert_path = os.path.join(os.path.dirname(__file__), 'ssl', 'cert.pem')
+    key_path = os.path.join(os.path.dirname(__file__), 'ssl', 'key.pem')
+
+    # Check if SSL certificates exist
+    if os.path.exists(cert_path) and os.path.exists(key_path):
+        print("\n Starting GURIA with HTTPS support")
+        print("   Access the application at: https://localhost:" + str(port))
+        print("\n Note: If you see a security warning, check the README for browser-specific instructions.\n")
+        app.run(host='0.0.0.0', port=port, ssl_context=(cert_path, key_path))
+    else:
+        print("\n Warning: SSL certificates not found in the 'ssl' directory.")
+        print("   Please run the guria script again to generate certificates.")
+        print("   For now, running in HTTP mode (less secure).\n")
+        app.run(host='0.0.0.0', port=port)
 
 if __name__ == '__main__':
     main()

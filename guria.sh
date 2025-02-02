@@ -283,8 +283,130 @@ export LD_LIBRARY_PATH="/usr/local/lib:$LD_LIBRARY_PATH"
 export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH"
 print_success "Environment variables configured"
 
+# Function to check if openssl is installed
+check_openssl() {
+    print_step "Checking OpenSSL installation..."
+    if ! command_exists "openssl"; then
+        print_warning "OpenSSL not found. Installing..."
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            brew install openssl
+        elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            if command_exists "apt-get"; then
+                sudo apt-get update && sudo apt-get install -y openssl
+            elif command_exists "yum"; then
+                sudo yum install -y openssl
+            elif command_exists "dnf"; then
+                sudo dnf install -y openssl
+            else
+                print_error "Could not install OpenSSL. Please install it manually."
+                return 1
+            fi
+        fi
+    fi
+    print_success "OpenSSL is installed"
+    return 0
+}
+
+# Function to check if mkcert is installed
+check_mkcert() {
+    print_step "Checking mkcert installation..."
+    if ! command_exists "mkcert"; then
+        print_warning "mkcert not found. Installing..."
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            brew install mkcert
+            brew install nss # for Firefox support
+        elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+            if command_exists "apt-get"; then
+                sudo apt-get update && sudo apt-get install -y libnss3-tools
+                curl -JLO "https://dl.filippo.io/mkcert/latest?for=linux/amd64"
+                chmod +x mkcert-v*-linux-amd64
+                sudo cp mkcert-v*-linux-amd64 /usr/local/bin/mkcert
+                rm mkcert-v*-linux-amd64
+            else
+                print_error "Could not install mkcert. Please install it manually from https://github.com/FiloSottile/mkcert"
+                return 1
+            fi
+        fi
+    fi
+    print_success "mkcert is installed"
+    return 0
+}
+
+# Function to generate SSL certificate using mkcert
+generate_ssl_certificate() {
+    local ssl_dir="$SCRIPT_DIR/ssl"
+    local cert_file="$ssl_dir/cert.pem"
+    local key_file="$ssl_dir/key.pem"
+
+    print_step "Setting up SSL certificates..."
+
+    # Check mkcert installation
+    check_mkcert || {
+        print_warning "Falling back to self-signed certificates..."
+        generate_self_signed_certificate
+        return
+    }
+
+    # Create SSL directory if it doesn't exist
+    mkdir -p "$ssl_dir"
+
+    # Only generate if certificates don't exist
+    if [ ! -f "$cert_file" ] || [ ! -f "$key_file" ]; then
+        print_step "Generating trusted SSL certificate for secure HTTPS..."
+        
+        # Install local CA if not already installed
+        mkcert -install
+
+        # Generate certificate
+        cd "$ssl_dir" && mkcert -key-file key.pem -cert-file cert.pem localhost 127.0.0.1 ::1
+        
+        print_success "Trusted SSL certificate generated successfully"
+        print_success "Your browser should now show a secure connection!"
+    else
+        print_success "SSL certificate already exists"
+    fi
+    return 0
+}
+
+# Function to generate self-signed certificate (fallback)
+generate_self_signed_certificate() {
+    local ssl_dir="$SCRIPT_DIR/ssl"
+    local cert_file="$ssl_dir/cert.pem"
+    local key_file="$ssl_dir/key.pem"
+
+    print_step "Setting up self-signed SSL certificates..."
+
+    # Check OpenSSL installation
+    check_openssl || return 1
+
+    # Create SSL directory if it doesn't exist
+    mkdir -p "$ssl_dir"
+
+    # Only generate if certificates don't exist
+    if [ ! -f "$cert_file" ] || [ ! -f "$key_file" ]; then
+        print_step "Generating self-signed SSL certificate..."
+        if ! openssl req -x509 -newkey rsa:4096 -nodes \
+            -out "$cert_file" \
+            -keyout "$key_file" \
+            -days 365 \
+            -subj "/CN=localhost" \
+            -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" 2>/dev/null; then
+            print_error "Failed to generate SSL certificates"
+            return 1
+        fi
+        print_success "Self-signed SSL certificate generated successfully"
+        print_warning "Note: Your browser will show a security warning - this is normal for self-signed certificates"
+    else
+        print_success "SSL certificate already exists"
+    fi
+    return 0
+}
+
 # First, check and stop any running instances
 check_and_stop_instances || exit 1
+
+# Generate SSL certificates
+generate_ssl_certificate || exit 1
 
 print_header "Launching GURIA"
 # Set Flask environment
