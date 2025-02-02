@@ -670,7 +670,6 @@ def verify_ssl_certificates(cert_path, key_path):
     """Verify that SSL certificates are valid"""
     try:
         import ssl
-        import datetime
         
         logger.info("Verifying SSL certificates...")
         
@@ -680,7 +679,7 @@ def verify_ssl_certificates(cert_path, key_path):
             return False
             
         # Try to create SSL context
-        context = ssl.create_default_context()
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         try:
             context.load_cert_chain(cert_path, key_path)
             logger.info("SSL certificates are valid")
@@ -690,6 +689,37 @@ def verify_ssl_certificates(cert_path, key_path):
             return False
     except Exception as e:
         logger.error(f"Error verifying SSL certificates: {str(e)}")
+        return False
+
+def generate_ssl_certificates(cert_path, key_path):
+    """Generate SSL certificates using mkcert"""
+    try:
+        ssl_dir = os.path.dirname(cert_path)
+        if not os.path.exists(ssl_dir):
+            os.makedirs(ssl_dir, exist_ok=True)
+
+        # Remove old certificates if they exist
+        if os.path.exists(cert_path):
+            os.remove(cert_path)
+        if os.path.exists(key_path):
+            os.remove(key_path)
+
+        # Run mkcert commands
+        logger.info("Installing mkcert root CA...")
+        install_result = os.system('mkcert -install')
+        if install_result != 0:
+            logger.error("Failed to install mkcert root CA")
+            return False
+
+        logger.info("Generating certificates...")
+        gen_result = os.system(f'mkcert -cert-file "{cert_path}" -key-file "{key_path}" localhost 127.0.0.1 ::1')
+        if gen_result != 0:
+            logger.error("Failed to generate certificates")
+            return False
+
+        return verify_ssl_certificates(cert_path, key_path)
+    except Exception as e:
+        logger.error(f"Error generating certificates: {str(e)}")
         return False
 
 def main():
@@ -715,46 +745,21 @@ def main():
     # Initialize the database
     init_db()
 
-    # Check Ollama status before starting
-    logger.info("Checking Ollama service before startup...")
-    ollama_status, error = check_ollama_status()
-    if not ollama_status:
-        logger.warning(f"Warning: {error}")
-        logger.warning("GURIA will start, but AI features may not work until Ollama is running")
-    else:
-        logger.info("Ollama service is running")
-
     # Check for SSL certificates
     cert_path = os.path.join(os.path.dirname(__file__), 'ssl', 'cert.pem')
     key_path = os.path.join(os.path.dirname(__file__), 'ssl', 'key.pem')
     
     ssl_context = None
     if not args.force_http:
-        ssl_dir = os.path.dirname(cert_path)
-        if not os.path.exists(ssl_dir):
-            os.makedirs(ssl_dir, exist_ok=True)
-        
-        # Always try to generate new certificates
-        logger.info("Generating new SSL certificates...")
         try:
-            # Remove old certificates if they exist
-            if os.path.exists(cert_path):
-                os.remove(cert_path)
-            if os.path.exists(key_path):
-                os.remove(key_path)
-            
-            # Generate new certificates
-            os.system('mkcert -install')
-            result = os.system(f'mkcert -cert-file {cert_path} -key-file {key_path} localhost 127.0.0.1 ::1')
-            
-            if result == 0 and verify_ssl_certificates(cert_path, key_path):
+            # Try to generate certificates
+            if generate_ssl_certificates(cert_path, key_path):
                 ssl_context = (cert_path, key_path)
-                logger.info("Successfully generated and verified SSL certificates")
+                logger.info("Successfully set up HTTPS with valid certificates")
             else:
-                logger.error("Failed to generate valid SSL certificates")
-                logger.info("Falling back to HTTP mode")
+                logger.warning("Failed to set up HTTPS, falling back to HTTP")
         except Exception as e:
-            logger.error(f"Error generating SSL certificates: {str(e)}")
+            logger.error(f"Error setting up HTTPS: {str(e)}")
             logger.info("Falling back to HTTP mode")
     
     protocol = 'https' if ssl_context else 'http'
@@ -763,7 +768,7 @@ def main():
     print(f"   Access the application at: {protocol}://localhost:{args.port}\n")
 
     if ssl_context:
-        print(" Note: If you see a security warning, check the README for browser-specific instructions.\n")
+        print(" Note: If you see a security warning, this is normal for local HTTPS certificates.\n")
     else:
         print(" Note: Running in HTTP mode. This is less secure but suitable for local development.\n")
 

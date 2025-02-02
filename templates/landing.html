@@ -194,6 +194,19 @@
     </div>
 
     <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if we're using HTTPS and handle any certificate issues
+            if (window.location.protocol === 'https:') {
+                fetch('/').catch(function(error) {
+                    if (error.message.includes('SSL') || error.message.includes('certificate')) {
+                        console.error('SSL/Certificate error:', error);
+                        // Redirect to HTTP if there are certificate issues
+                        window.location.href = window.location.href.replace('https:', 'http:');
+                    }
+                });
+            }
+        });
+
         async function shutdownApp() {
             if (!confirm('Are you sure you want to shutdown GURIA? This will stop both the app and Ollama.')) {
                 return;
@@ -288,6 +301,17 @@
             } catch (error) {
                 console.error('Error:', error);
                 const errorMessage = error.message || 'Failed to connect to the server';
+                
+                // Check if it's a certificate error
+                if (error.message.includes('SSL') || error.message.includes('certificate')) {
+                    if (window.location.protocol === 'https:') {
+                        if (confirm('There seems to be an issue with HTTPS. Would you like to try HTTP instead?')) {
+                            window.location.href = window.location.href.replace('https:', 'http:');
+                            return;
+                        }
+                    }
+                }
+                
                 alert('Error initializing model: ' + errorMessage + '\n\nPlease make sure Ollama is running and try again.');
                 loadingOverlay.classList.add('hidden');
                 loadingOverlay.classList.remove('flex');
