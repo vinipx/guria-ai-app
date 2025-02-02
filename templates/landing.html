@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GURIA - Select Model</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'sans': ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'chat-dark': '#111111',
+                        'chat-darker': '#0a0a0a',
+                        'chat-light': '#1a1a1a',
+                        'chat-accent': '#e0af68',
+                        'chat-accent-hover': '#ff9e64',
+                        'chat-border': '#2a2a2a'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111111;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2a2a2a;
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3a3a3a;
+        }
+        
+        /* Logo animation */
+        .logo-container:hover .logo-ia {
+            color: #e0af68;
+            transform: scale(1.05);
+        }
+        .logo-ia {
+            transition: all 0.3s ease;
+        }
+
+        /* Model card hover effect */
+        .model-card {
+            transition: all 0.3s ease;
+            border: 1px solid #2a2a2a;
+            background-color: #1a1a1a;
+        }
+        .model-card:hover {
+            transform: translateY(-2px);
+            border-color: #e0af68;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Chat-like container styles */
+        .chat-container {
+            background-color: #111111;
+            min-height: 100vh;
+        }
+
+        .message {
+            padding: 1rem;
+            line-height: 1.6;
+            color: #e4e4e4;
+        }
+
+        .message:nth-child(odd) {
+            background-color: #1a1a1a;
+        }
+
+        /* Chat message styling */
+        .chat-message {
+            padding: 1.5rem;
+            border-bottom: 1px solid rgba(224, 175, 104, 0.2);
+        }
+
+        .chat-message.user {
+            background-color: #111111;
+        }
+
+        .chat-message.assistant {
+            background-color: #1a1a1a;
+        }
+
+        .chat-message .message-content {
+            max-width: 48rem;
+            margin: 0 auto;
+            color: #e4e4e4;
+        }
+
+        /* Typography styles */
+        h1, h2, h3 {
+            color: #e0af68;
+        }
+
+        /* Button styles */
+        .btn-primary {
+            background-color: #e0af68;
+            color: #111111;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            background-color: #ff9e64;
+            transform: translateY(-1px);
+        }
+
+        /* Card styles */
+        .card {
+            background-color: #1a1a1a;
+            border: 1px solid #2a2a2a;
+        }
+
+        .card:hover {
+            border-color: #e0af68;
+        }
+    </style>
+</head>
+<body class="bg-chat-dark text-gray-100 min-h-screen font-sans">
+    {% include 'shutdown_button.html' %}
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <div class="flex flex-col items-center justify-center mb-12">
+            <div class="flex items-center justify-center mb-6">
+                <h1 class="text-8xl font-black">
+                    <span class="text-gray-100">GUR</span><span class="logo-ia text-chat-accent font-black">IA</span>
+                </h1>
+            </div>
+            <p class="text-lg text-gray-300 text-center mb-8">Generative Understanding & Responsive Intelligent Assistant</p>
+            <div class="mt-8">
+                <p class="text-lg text-gray-300 text-center">Select your preferred AI model to start chatting</p>
+            </div>
+        </div>
+
+        {% if not ollama_running %}
+        <div class="bg-yellow-900/20 border border-yellow-700/30 text-yellow-200 px-4 py-3 rounded-lg mb-6" role="alert">
+            <div class="flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                </svg>
+                <span>Ollama service is not running. Please start it using: <code class="bg-yellow-800/30 px-2 py-1 rounded">ollama serve</code></span>
+            </div>
+        </div>
+        {% endif %}
+
+        <h2 class="text-2xl font-bold text-center mb-8">Select Your Model</h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {% for model, specs in models.items() %}
+            <div class="model-card bg-chat-light/50 rounded-xl p-6 cursor-pointer hover:bg-chat-light/70" onclick="selectModel('{{ model }}')">
+                <div class="flex items-start justify-between mb-4">
+                    <h3 class="text-xl font-semibold text-chat-accent">{{ model }}</h3>
+                    <span class="bg-chat-darker px-3 py-1 rounded-full text-xs font-medium">{{ specs.ram }}</span>
+                </div>
+                <p class="text-gray-300 text-sm mb-4">{{ specs.description }}</p>
+                <div class="flex items-center justify-between">
+                    <span class="text-xs text-gray-400">Click to select</span>
+                    <svg class="w-5 h-5 text-chat-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                    </svg>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center">
+        <div class="bg-chat-light p-8 rounded-xl shadow-xl max-w-md w-full mx-4">
+            <div class="flex flex-col items-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-4 border-chat-accent border-t-transparent mb-4"></div>
+                <h3 class="text-xl font-semibold mb-2">Initializing Model</h3>
+                <p id="loading-status" class="text-gray-400 text-center">Starting up <span class="model-name"></span>...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function selectModel(model) {
+            const loadingOverlay = document.getElementById('loading-overlay');
+            const loadingStatus = document.getElementById('loading-status');
+            const modelSpans = document.querySelectorAll('.model-name');
+            
+            // Update all elements with the model name
+            modelSpans.forEach(span => span.textContent = model);
+            
+            // Show loading overlay
+            loadingOverlay.classList.remove('hidden');
+            loadingOverlay.classList.add('flex');
+            
+            try {
+                const response = await fetch('/initialize_model', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ model }),
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    // Redirect to the chat interface
+                    window.location.href = '/chat';
+                } else {
+                    throw new Error(data.error || 'Failed to initialize model');
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+                loadingOverlay.classList.add('hidden');
+                loadingOverlay.classList.remove('flex');
+            }
+        }
+    </script>
+</body>
+</html>

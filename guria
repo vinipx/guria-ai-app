@@ -1,0 +1,60 @@
+#!/bin/bash
+
+# Get the directory where the script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Function to detect OS
+detect_os() {
+    case "$(uname -s)" in
+        Darwin*)    echo "mac";;
+        Linux*)     echo "linux";;
+        CYGWIN*)    echo "windows";;
+        MINGW*)     echo "windows";;
+        MSYS*)      echo "windows";;
+        *)          echo "unknown";;
+    esac
+}
+
+# Function to check if running in WSL
+is_wsl() {
+    if [ -f /proc/version ]; then
+        if grep -qi microsoft /proc/version; then
+            return 0  # true
+        fi
+    fi
+    return 1  # false
+}
+
+# Get OS type
+OS=$(detect_os)
+
+# Create setup directory if it doesn't exist
+mkdir -p "$SCRIPT_DIR/setup"
+
+# Ensure setup scripts are executable
+chmod +x "$SCRIPT_DIR/setup/mac_setup.sh" 2>/dev/null
+chmod +x "$SCRIPT_DIR/setup/windows_setup.ps1" 2>/dev/null
+
+case $OS in
+    "mac")
+        # Run macOS setup
+        bash "$SCRIPT_DIR/setup/mac_setup.sh" "$SCRIPT_DIR"
+        ;;
+    "linux")
+        if is_wsl; then
+            # Running in WSL, use PowerShell
+            powershell.exe -ExecutionPolicy Bypass -File "$SCRIPT_DIR/setup/windows_setup.ps1" -ScriptDir "$SCRIPT_DIR"
+        else
+            # Regular Linux, use macOS setup (since it's bash-based)
+            bash "$SCRIPT_DIR/setup/mac_setup.sh" "$SCRIPT_DIR"
+        fi
+        ;;
+    "windows")
+        # Run Windows setup
+        powershell.exe -ExecutionPolicy Bypass -File "$SCRIPT_DIR/setup/windows_setup.ps1" -ScriptDir "$SCRIPT_DIR"
+        ;;
+    *)
+        echo "Unsupported operating system"
+        exit 1
+        ;;
+esac

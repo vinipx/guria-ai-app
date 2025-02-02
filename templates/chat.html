@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GURIA - Chat Interface</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/4.0.2/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/github-dark.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'sans': ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'chat-dark': '#111111',
+                        'chat-darker': '#0a0a0a',
+                        'chat-light': '#1a1a1a',
+                        'chat-accent': '#e0af68',
+                        'chat-accent-hover': '#ff9e64',
+                        'chat-border': '#2a2a2a'
+                    }
+                }
+            }
+        }
+        
+        // Configure marked with syntax highlighting
+        marked.setOptions({
+            highlight: function(code, lang) {
+                if (lang && hljs.getLanguage(lang)) {
+                    try {
+                        return hljs.highlight(code, { language: lang }).value;
+                    } catch (e) {}
+                }
+                return code;
+            },
+            breaks: true,
+            gfm: true,
+            headerIds: true,
+            mangle: false,
+            pedantic: false,
+            smartLists: true,
+            smartypants: true
+        });
+    </script>
+    <style>
+        /* Base styles */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            line-height: 1.6;
+            color: #e4e4e4;
+            background-color: #111111;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #111111;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #2a2a2a;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3a3a3a;
+        }
+
+        /* Chat message styling */
+        .chat-message {
+            padding: 2rem 1rem;
+            transition: background-color 0.3s ease;
+        }
+
+        .chat-message.user {
+            background-color: #111111;
+        }
+
+        .chat-message.assistant {
+            background-color: #1a1a1a;
+            border-bottom: 1px solid rgba(224, 175, 104, 0.2);
+        }
+
+        /* Message content max width and padding */
+        .message-content {
+            max-width: 48rem;
+            margin: 0 auto;
+            color: #e4e4e4;
+            font-size: 1rem;
+            line-height: 1.7;
+            padding: 0 1rem;
+        }
+
+        /* Improved typography styles */
+        .message-content h1 {
+            font-size: 1.875rem;
+            font-weight: 700;
+            margin: 2.5rem 0 1.5rem;
+            color: #e0af68;
+            padding-bottom: 0.75rem;
+        }
+
+        .message-content h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 2rem 0 1rem;
+            color: #e0af68;
+            padding-bottom: 0.5rem;
+        }
+
+        .message-content h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 1.75rem 0 0.875rem;
+            color: #e0af68;
+        }
+
+        .message-content p {
+            margin: 1.25rem 0;
+            line-height: 1.8;
+            color: #e4e4e4;
+        }
+
+        .message-content ul, 
+        .message-content ol {
+            margin: 1.25rem 0;
+            padding-left: 1.75rem;
+            color: #e4e4e4;
+        }
+
+        .message-content ul {
+            list-style-type: disc;
+        }
+
+        .message-content ol {
+            list-style-type: decimal;
+        }
+
+        .message-content li {
+            margin: 0.75rem 0;
+            padding-left: 0.5rem;
+        }
+
+        .message-content li::marker {
+            color: #e0af68;
+        }
+
+        /* Enhanced code styling */
+        .message-content code {
+            background-color: #0a0a0a;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+            font-size: 0.875em;
+            color: #e0af68;
+        }
+
+        .message-content pre {
+            background-color: #0a0a0a;
+            padding: 1.25rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+            border: 1px solid rgba(224, 175, 104, 0.2);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        .message-content pre code {
+            background-color: transparent;
+            padding: 0;
+            color: #e4e4e4;
+            font-size: 0.875em;
+            line-height: 1.7;
+        }
+
+        /* Enhanced markdown styling */
+        .message-content strong {
+            font-weight: 600;
+            color: #e0af68;
+            padding: 0.1rem 0.3rem;
+            border-radius: 0.25rem;
+        }
+
+        .message-content em {
+            font-style: italic;
+            color: #bb9af7;
+        }
+
+        .message-content blockquote {
+            border-left: 3px solid #e0af68;
+            padding: 1rem 0 1rem 1.5rem;
+            margin: 1.5rem 0;
+            background-color: rgba(224, 175, 104, 0.1);
+            border-radius: 0 0.5rem 0.5rem 0;
+        }
+
+        .message-content blockquote p {
+            margin: 0.5rem 0;
+            color: #e4e4e4;
+            font-style: italic;
+        }
+
+        .message-content a {
+            color: #7aa2f7;
+            text-decoration: none;
+            border-bottom: 1px solid rgba(122, 162, 247, 0.3);
+            transition: all 0.2s ease;
+            padding: 0.1rem 0.2rem;
+        }
+
+        .message-content a:hover {
+            border-bottom-color: #7aa2f7;
+            background-color: rgba(122, 162, 247, 0.1);
+            border-radius: 0.25rem;
+        }
+
+        /* Table styling */
+        .message-content table {
+            width: 100%;
+            margin: 1.25rem 0;
+            border-collapse: separate;
+            border-spacing: 0;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+
+        .message-content th,
+        .message-content td {
+            padding: 0.75rem 1rem;
+            border: 1px solid #292e42;
+            text-align: left;
+        }
+
+        .message-content th {
+            font-weight: 600;
+            color: #e0af68;
+        }
+
+        .message-content tr:nth-child(even) {
+            background-color: rgba(36, 40, 59, 0.3);
+        }
+
+        /* Chat history styling */
+        .chat-history-item {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(224, 175, 104, 0.2);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chat-history-item:hover {
+            background-color: rgba(224, 175, 104, 0.1);
+        }
+
+        .chat-history-item.active {
+            background-color: rgba(224, 175, 104, 0.15);
+            border-left: 3px solid #e0af68;
+        }
+
+        .chat-history-item .content {
+            flex-grow: 1;
+            margin-right: 1rem;
+            overflow: hidden;
+        }
+
+        .chat-history-item .timestamp {
+            font-size: 0.75rem;
+            color: rgba(192, 202, 245, 0.5);
+        }
+
+        .chat-history-item .query {
+            font-size: 0.875rem;
+            color: #e4e4e4;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .chat-history-item .delete-btn {
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            padding: 0.5rem;
+            color: #e0af68;
+            cursor: pointer;
+        }
+
+        .chat-history-item:hover .delete-btn {
+            opacity: 1;
+        }
+
+        .chat-history-item .delete-btn:hover {
+            color: #ff9e64;
+        }
+
+        /* Export button styling */
+        .export-container {
+            position: relative;
+            display: inline-block;
+        }
+
+        .export-btn {
+            color: #e0af68;
+            padding: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-radius: 0.375rem;
+        }
+
+        .export-btn:hover {
+            color: #ff9e64;
+            background-color: rgba(224, 175, 104, 0.1);
+        }
+
+        .export-dropdown {
+            position: absolute;
+            right: 0;
+            top: 100%;
+            margin-top: 0.5rem;
+            background-color: #0a0a0a;
+            border: 1px solid #2a2a2a;
+            border-radius: 0.5rem;
+            padding: 0.5rem;
+            min-width: 160px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.2s ease;
+            z-index: 50;
+        }
+
+        .export-dropdown.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .export-option {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            color: #e4e4e4;
+            cursor: pointer;
+            border-radius: 0.375rem;
+            transition: all 0.2s ease;
+        }
+
+        .export-option:hover {
+            background-color: rgba(224, 175, 104, 0.1);
+            color: #e0af68;
+        }
+
+        .export-option svg {
+            width: 1.25rem;
+            height: 1.25rem;
+        }
+    </style>
+</head>
+<body class="bg-chat-dark text-gray-100 min-h-screen font-sans">
+    <!-- Main container with sidebar -->
+    <div class="flex h-screen">
+        <!-- Chat history sidebar -->
+        <div id="chat-sidebar" class="w-80 bg-chat-darker border-r border-chat-border flex flex-col">
+            <!-- Sidebar header -->
+            <div class="p-4 border-b border-chat-border flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-chat-accent">CHATS</h2>
+                <button id="clear-history" class="text-chat-accent hover:text-chat-accent-hover text-sm px-3 py-1 rounded border border-chat-accent hover:border-chat-accent-hover transition-colors">
+                    Clear All
+                </button>
+            </div>
+            
+            <!-- Chat history list -->
+            <div id="chat-history-list" class="flex-1 overflow-y-auto">
+                <!-- Chat history items will be inserted here -->
+            </div>
+
+            <!-- Shutdown button at the bottom -->
+            <div class="p-4 border-t border-chat-border">
+                <button id="shutdown" 
+                    onclick="fetch('/shutdown', { method: 'POST' }).then(() => window.close())"
+                    class="w-full bg-chat-accent hover:bg-chat-accent-hover text-black font-medium py-2 px-4 rounded-lg transition-all flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"></path>
+                    </svg>
+                    Shutdown Server
+                </button>
+            </div>
+        </div>
+
+        <!-- Main chat area -->
+        <div class="flex-1 flex flex-col">
+            <!-- Chat messages -->
+            <div class="flex-1 overflow-y-auto p-4" id="chat-messages">
+                <!-- Messages will be inserted here -->
+            </div>
+
+            <!-- Export button -->
+            <div class="fixed top-4 right-4">
+                <div class="export-container">
+                    <button class="export-btn" id="exportBtn">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                    </button>
+                    <div class="export-dropdown" id="exportDropdown">
+                        <div class="export-option" onclick="exportChat('txt')">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            Text File (.txt)
+                        </div>
+                        <div class="export-option" onclick="exportChat('md')">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                            Markdown (.md)
+                        </div>
+                        <div class="export-option" onclick="exportChat('pdf')">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                            PDF Document (.pdf)
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input area -->
+            <div class="border-t border-chat-border bg-chat-dark p-4">
+                <div class="max-w-4xl mx-auto">
+                    <div class="relative">
+                        <textarea 
+                            id="query" 
+                            class="w-full bg-chat-darker border border-chat-border text-gray-100 rounded-lg py-3 px-4 pr-24 focus:outline-none focus:ring-2 focus:ring-chat-accent focus:border-transparent transition-all resize-none"
+                            rows="3"
+                            placeholder="Send a message..."
+                        ></textarea>
+                        <button 
+                            id="submit" 
+                            class="absolute bottom-2 right-2 bg-chat-accent hover:bg-chat-accent-hover text-black font-medium p-2 rounded-lg transition-all flex items-center justify-center"
+                        >
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Function to create a message element
+        function createMessageElement(content, isUser = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${isUser ? 'user' : 'assistant'}`;
+            
+            const innerDiv = document.createElement('div');
+            innerDiv.className = 'message-content';
+            
+            if (isUser) {
+                innerDiv.textContent = content;
+            } else {
+                innerDiv.innerHTML = marked.parse(content);
+                innerDiv.querySelectorAll('pre code').forEach((block) => {
+                    hljs.highlightElement(block);
+                });
+            }
+            
+            messageDiv.appendChild(innerDiv);
+            return messageDiv;
+        }
+
+        // Function to format timestamp
+        function formatTimestamp(isoString) {
+            const date = new Date(isoString);
+            return date.toLocaleString();
+        }
+
+        // Function to load chat history
+        async function loadChatHistory() {
+            try {
+                const response = await fetch('/chat_history');
+                const history = await response.json();
+                const historyList = document.getElementById('chat-history-list');
+                historyList.innerHTML = '';
+
+                history.forEach(chat => {
+                    const historyItem = createChatHistoryItem(chat);
+                    historyList.appendChild(historyItem);
+                });
+            } catch (error) {
+                console.error('Error loading chat history:', error);
+            }
+        }
+
+        // Function to create a chat history item
+        function createChatHistoryItem(chat) {
+            const div = document.createElement('div');
+            div.className = 'chat-history-item';
+            div.setAttribute('data-chat-id', chat.id);
+            div.onclick = (e) => {
+                if (!e.target.closest('.delete-btn')) {
+                    loadChat(chat.id);
+                }
+            };
+
+            const content = document.createElement('div');
+            content.className = 'content';
+
+            const timestamp = document.createElement('div');
+            timestamp.className = 'timestamp';
+            timestamp.textContent = formatTimestamp(chat.timestamp);
+            content.appendChild(timestamp);
+
+            const query = document.createElement('div');
+            query.className = 'query';
+            query.textContent = chat.query;
+            content.appendChild(query);
+
+            div.appendChild(content);
+
+            // Add delete button
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-btn';
+            deleteBtn.innerHTML = `
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>`;
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteChat(chat.id);
+            };
+            div.appendChild(deleteBtn);
+
+            return div;
+        }
+
+        // Function to delete a single chat
+        async function deleteChat(chatId) {
+            try {
+                const response = await fetch('/delete_chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ chat_id: chatId })
+                });
+
+                if (response.ok) {
+                    loadChatHistory(); // Refresh the chat history
+                } else {
+                    console.error('Failed to delete chat');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        }
+
+        // Function to load a single chat
+        async function loadChat(chatId) {
+            try {
+                const response = await fetch('/get_chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ chat_id: chatId })
+                });
+
+                if (response.ok) {
+                    const chat = await response.json();
+                    const chatMessages = document.getElementById('chat-messages');
+                    chatMessages.innerHTML = '';
+
+                    // Create and append the user message
+                    const userMessage = createMessageElement(chat.query, true);
+                    chatMessages.appendChild(userMessage);
+
+                    // Create and append the assistant message
+                    const assistantMessage = createMessageElement(chat.response, false);
+                    chatMessages.appendChild(assistantMessage);
+
+                    // Update active state
+                    document.querySelectorAll('.chat-history-item').forEach(item => {
+                        item.classList.remove('active');
+                    });
+                    
+                    // Find and highlight the clicked item
+                    const items = document.querySelectorAll('.chat-history-item');
+                    items.forEach(item => {
+                        if (item.getAttribute('data-chat-id') === chatId.toString()) {
+                            item.classList.add('active');
+                        }
+                    });
+                } else {
+                    console.error('Failed to load chat');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                const errorMessage = createMessageElement(`Error: ${error.message}`, false);
+                chatMessages.appendChild(errorMessage);
+            }
+        }
+
+        // Load chat history when page loads
+        loadChatHistory();
+
+        // Add clear history button handler
+        document.getElementById('clear-history').addEventListener('click', async () => {
+            if (confirm('Are you sure you want to clear all chat history?')) {
+                try {
+                    await fetch('/clear_history', { method: 'POST' });
+                    loadChatHistory();
+                    document.getElementById('chat-messages').innerHTML = '';
+                } catch (error) {
+                    console.error('Error clearing chat history:', error);
+                }
+            }
+        });
+
+        // Handle form submission
+        document.getElementById('submit').addEventListener('click', async () => {
+            const query = document.getElementById('query').value.trim();
+            if (!query) return;
+
+            const chatMessages = document.getElementById('chat-messages');
+            const submitButton = document.getElementById('submit');
+            
+            // Add user message
+            chatMessages.appendChild(createMessageElement(query, true));
+            
+            // Clear input and scroll to bottom
+            document.getElementById('query').value = '';
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            // Disable button and show loading state
+            submitButton.disabled = true;
+            submitButton.innerHTML = `
+                <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            `;
+
+            try {
+                const response = await fetch('/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+
+                if (!response.ok) throw new Error('Failed to get response');
+
+                const assistantMessage = createMessageElement('', false);
+                chatMessages.appendChild(assistantMessage);
+                const assistantContent = assistantMessage.querySelector('.message-content');
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let fullResponse = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.slice(6));
+                                if (data.response) {
+                                    fullResponse += data.response;
+                                    assistantContent.innerHTML = marked.parse(fullResponse);
+                                    assistantContent.querySelectorAll('pre code').forEach((block) => {
+                                        hljs.highlightElement(block);
+                                    });
+                                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                                }
+                            } catch (e) {
+                                console.error('Error parsing SSE data:', e);
+                            }
+                        }
+                    }
+                }
+
+                // Reload chat history after response
+                setTimeout(loadChatHistory, 1000);
+            } catch (error) {
+                console.error('Error:', error);
+                const errorMessage = createMessageElement(`Error: ${error.message}`, false);
+                chatMessages.appendChild(errorMessage);
+            } finally {
+                // Reset button state
+                submitButton.disabled = false;
+                submitButton.innerHTML = `
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                    </svg>
+                `;
+            }
+        });
+
+        // Handle Enter key to submit
+        document.getElementById('query').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                document.getElementById('submit').click();
+            }
+        });
+
+        // Export dropdown toggle
+        document.addEventListener('DOMContentLoaded', function() {
+            const exportBtn = document.getElementById('exportBtn');
+            const exportDropdown = document.getElementById('exportDropdown');
+            
+            exportBtn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                exportDropdown.classList.toggle('show');
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (!exportDropdown.contains(e.target) && !exportBtn.contains(e.target)) {
+                    exportDropdown.classList.remove('show');
+                }
+            });
+        });
+
+        // Function to export chat
+        async function exportChat(format) {
+            const chatMessages = document.getElementById('chat-messages');
+            let content = '';
+            let filename = `chat_export_${new Date().toISOString().slice(0,10)}`;
+            let mimeType = '';
+
+            // Get all messages
+            const messages = chatMessages.querySelectorAll('.chat-message');
+            messages.forEach((msg) => {
+                const isUser = msg.classList.contains('user');
+                const messageContent = msg.querySelector('.message-content').innerHTML;
+                
+                if (format === 'txt') {
+                    content += `${isUser ? 'User' : 'Assistant'}: ${messageContent.replace(/<[^>]*>/g, '')}\n\n`;
+                    mimeType = 'text/plain';
+                } else if (format === 'md') {
+                    content += `### ${isUser ? 'User' : 'Assistant'}\n${messageContent}\n\n`;
+                    mimeType = 'text/markdown';
+                } else if (format === 'pdf') {
+                    // For PDF, we'll send to backend
+                    content += `<h3>${isUser ? 'User' : 'Assistant'}</h3>${messageContent}<br><br>`;
+                }
+            });
+
+            if (format === 'pdf') {
+                // Send to backend for PDF generation
+                try {
+                    const response = await fetch('/export_pdf', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ content })
+                    });
+                    
+                    if (!response.ok) {
+                        const error = await response.json();
+                        console.error('Error exporting PDF:', error);
+                        alert('Failed to generate PDF. Please try again.');
+                        return;
+                    }
+                    
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${filename}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    a.remove();
+                } catch (error) {
+                    console.error('Error exporting PDF:', error);
+                    alert('Failed to generate PDF. Please try again.');
+                }
+            } else {
+                // Direct download for txt and md
+                const blob = new Blob([content], { type: mimeType });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${filename}.${format}`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                a.remove();
+            }
+
+            // Close dropdown
+            document.getElementById('exportDropdown').classList.remove('show');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+<!-- Shutdown Button -->
+<div class="fixed bottom-8 left-1/2 transform -translate-x-1/2">
+    <button onclick="shutdownApp()" class="bg-deep-accent hover:bg-yellow-500 text-deep-dark font-semibold px-6 py-3 rounded-lg flex items-center space-x-3 transition-all duration-200 hover:scale-105 shadow-lg">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.636 5.636a9 9 0 1012.728 0M12 3v9"></path>
+        </svg>
+        <span>Shutdown</span>
+    </button>
+</div>
+
+<!-- Shutdown Script -->
+<script>
+    async function shutdownApp() {
+        if (!confirm('Are you sure you want to shutdown GURIA? This will stop both the app and Ollama.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/shutdown', {
+                method: 'POST',
+            });
+            
+            if (response.ok) {
+                // Show a styled shutdown message
+                document.body.innerHTML = `
+                    <div class="fixed inset-0 bg-deep-dark flex items-center justify-center">
+                        <div class="text-center p-8 bg-gray-800 rounded-xl shadow-2xl max-w-md mx-4">
+                            <svg class="w-16 h-16 mx-auto mb-6 text-deep-accent animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.636 5.636a9 9 0 1012.728 0M12 3v9"></path>
+                            </svg>
+                            <h1 class="text-3xl font-bold text-deep-accent mb-4">Shutting Down...</h1>
+                            <p class="text-gray-400 mb-8">GURIA is gracefully shutting down. You can close this window safely.</p>
+                            <div class="text-sm text-gray-500">Thank you for using GURIA!</div>
+                        </div>
+                    </div>
+                `;
+                
+                // After 2 seconds, update the message to show completion
+                setTimeout(() => {
+                    document.body.innerHTML = `
+                        <div class="fixed inset-0 bg-deep-dark flex items-center justify-center">
+                            <div class="text-center p-8 bg-gray-800 rounded-xl shadow-2xl max-w-md mx-4">
+                                <svg class="w-16 h-16 mx-auto mb-6 text-deep-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                                </svg>
+                                <h1 class="text-3xl font-bold text-deep-accent mb-4">Shutdown Complete</h1>
+                                <p class="text-gray-400 mb-8">GURIA has been successfully shut down.</p>
+                                <div class="text-sm text-gray-500">You can now close this window.</div>
+                            </div>
+                        </div>
+                    `;
+                }, 2000);
+            } else {
+                const data = await response.json();
+                throw new Error(data.error || 'Failed to shutdown');
+            }
+        } catch (error) {
+            alert('Error shutting down: ' + error.message);
+        }
+    }
+</script>

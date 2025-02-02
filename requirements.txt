@@ -1,0 +1,8 @@
+flask==3.0.0
+flask-cors==4.0.0
+reportlab==4.2.5
+markdown2==2.5.3
+Pillow==10.4.0
+requests==2.31.0
+python-dotenv==1.0.0
+chardet==4.0.0
