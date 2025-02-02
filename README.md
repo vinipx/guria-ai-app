@@ -27,18 +27,7 @@
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-- Python 3.8 or higher
-- [Ollama](https://ollama.ai/) installed and running
-- For Windows users:
-  - Windows 10/11 with PowerShell
-  - WSL (Windows Subsystem for Linux) is supported
-- For macOS/Linux users:
-  - Terminal access
-  - Basic build tools (included in macOS, major Linux distributions)
-
-### Installation
+GURIA comes with a smart setup script that handles everything for you! No need to manually install prerequisites - the script will check and install what's needed.
 
 1. Clone the repository:
 ```bash
@@ -46,7 +35,7 @@ git clone https://github.com/vinipx/guria-ai-app.git
 cd guria-ai-app
 ```
 
-2. Run the setup script:
+2. Run GURIA:
 
 **On Windows:**
 ```powershell
@@ -58,31 +47,35 @@ cd guria-ai-app
 ./guria
 ```
 
-The script will automatically:
-- Detect your operating system
-- Choose the appropriate setup process
-- Create a virtual environment
+That's it! The script will automatically:
+- Check and install prerequisites (Python, Ollama, etc.)
+- Set up the virtual environment
 - Install all dependencies
 - Configure the application
 - Start the server
 
-### Platform-Specific Notes
+Your default web browser will open to `http://localhost:5000` when everything is ready.
 
-#### Windows Users
-- Runs natively on Windows using PowerShell
-- Also supports WSL if you prefer a Linux environment
-- Automatically handles Windows-specific path issues
-- Uses PowerShell-styled output for better Windows integration
+### Platform Support
 
-#### macOS Users
-- Native support for both Intel and Apple Silicon
-- Automatically configures required environment variables
-- Handles macOS-specific library paths
+GURIA works seamlessly across all major platforms:
+- ✅ **Windows**: Native support via PowerShell (Windows 10/11)
+- ✅ **macOS**: Full support for both Intel and Apple Silicon
+- ✅ **Linux**: Compatible with all major distributions
+- ✅ **WSL**: Windows Subsystem for Linux supported
 
-#### Linux Users
-- Supports all major Linux distributions
-- Uses the same setup process as macOS
-- Automatically adjusts paths for Linux environment
+## 🎯 Usage
+
+Just run the GURIA script and you're good to go:
+```bash
+# Windows
+.\guria
+
+# macOS/Linux
+./guria
+```
+
+The script will ensure Ollama is running and handle everything else for you!
 
 ## 🛠️ Technology Stack
 
@@ -92,28 +85,6 @@ The script will automatically:
 - **Database**: SQLite
 - **PDF Generation**: ReportLab
 - **Process Management**: psutil
-
-## 🎯 Usage
-
-1. Start Ollama service:
-```bash
-# Windows/macOS/Linux
-ollama serve
-```
-
-2. Launch GURIA:
-```bash
-# Windows
-.\guria
-
-# macOS/Linux
-./guria
-```
-
-3. Open your browser and navigate to:
-```
-http://localhost:5000
-```
 
 ## 🔧 Configuration
 
