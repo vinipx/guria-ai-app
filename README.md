@@ -58,38 +58,7 @@ That's it! The script will automatically:
 
 Your default web browser will open to `https://localhost:7860` when everything is ready.
 
-> **Note about HTTPS**: GURIA uses HTTPS for secure local development. The setup script will attempt to use `mkcert` to create a properly trusted certificate. If successful, your browser will show a secure connection. If `mkcert` installation fails, it will fall back to a self-signed certificate, in which case you'll see security warnings that you can safely bypass:
-> 
-> **If you see security warnings:**
-> 
-> **Chrome/Edge**:
-> 1. Click anywhere on the warning page
-> 2. Type "thisisunsafe" (you won't see what you're typing)
-> 3. The page will load automatically
->
-> **Firefox**:
-> 1. Click "Advanced..."
-> 2. Click "Accept the Risk and Continue"
->
-> **Safari**:
-> 1. Click "Show Details"
-> 2. Click "visit this website"
-> 3. Click "Visit Website" in the popup
-> 4. Enter your computer's password if prompted
->
-> To avoid these warnings, you can manually install `mkcert`:
-> ```bash
-> # macOS
-> brew install mkcert
-> brew install nss  # for Firefox support
-> 
-> # Linux (Ubuntu/Debian)
-> sudo apt-get install libnss3-tools
-> curl -JLO "https://dl.filippo.io/mkcert/latest?for=linux/amd64"
-> chmod +x mkcert-v*-linux-amd64
-> sudo cp mkcert-v*-linux-amd64 /usr/local/bin/mkcert
-> ```
-> Then run the GURIA script again to generate trusted certificates.
+> **Note**: Your browser may show a security warning on first access because we use a local certificate for development. This is normal and safe to proceed.
 
 ### Platform Support
 
