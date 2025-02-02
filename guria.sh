@@ -402,6 +402,33 @@ generate_self_signed_certificate() {
     return 0
 }
 
+# Function to check and kill existing GURIA processes on a given port
+check_and_kill_existing_process() {
+    local port=$1
+    # Get all PIDs using the port
+    local pids=$(lsof -t -i ":$port" 2>/dev/null)
+    
+    if [ ! -z "$pids" ]; then
+        print_step "Found processes using port $port: $pids"
+        print_step "Stopping processes..."
+        # Kill all processes using the port
+        for pid in $pids; do
+            kill -9 $pid 2>/dev/null
+        done
+        sleep 2
+        
+        # Verify port is free
+        if lsof -i ":$port" >/dev/null 2>&1; then
+            print_error "Failed to free up port $port"
+            return 1
+        else
+            print_success "Port $port is now free"
+            return 0
+        fi
+    fi
+    return 0
+}
+
 # First, check and stop any running instances
 check_and_stop_instances || exit 1
 
@@ -409,14 +436,51 @@ check_and_stop_instances || exit 1
 generate_ssl_certificate || exit 1
 
 print_header "Launching GURIA"
-# Set Flask environment
+# Set Flask environment variables
 export FLASK_APP="$SCRIPT_DIR/app.py"
 export FLASK_ENV=production
 export FLASK_DEBUG=0
 print_success "Flask environment configured"
 
+print_step "Checking for existing GURIA processes..."
+check_and_kill_existing_process 7860 || exit 1
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --http)
+            USE_HTTP=true
+            shift
+            ;;
+        --debug)
+            DEBUG_MODE=true
+            shift
+            ;;
+        --port)
+            PORT="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+# Set default port if not specified
+PORT=${PORT:-7860}
+
 print_step "Starting application..."
 echo -e "${DIM}Press Ctrl+C to stop the application${NC}\n"
 
-# Ensure we're in the right directory and using the virtual environment's Python
-cd "$SCRIPT_DIR" && source venv/bin/activate && python app.py
+# Build the command with appropriate flags
+CMD="cd \"$SCRIPT_DIR\" && source venv/bin/activate && python \"$SCRIPT_DIR/app.py\" --port \"$PORT\""
+if [ "$USE_HTTP" = true ]; then
+    CMD="$CMD --force-http"
+fi
+if [ "$DEBUG_MODE" = true ]; then
+    CMD="$CMD --debug"
+fi
+
+# Run the command
+eval "$CMD"

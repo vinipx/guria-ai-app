@@ -286,7 +286,9 @@
                     throw new Error(data.error || 'Failed to initialize model');
                 }
             } catch (error) {
-                alert('Error: ' + error.message);
+                console.error('Error:', error);
+                const errorMessage = error.message || 'Failed to connect to the server';
+                alert('Error initializing model: ' + errorMessage + '\n\nPlease make sure Ollama is running and try again.');
                 loadingOverlay.classList.add('hidden');
                 loadingOverlay.classList.remove('flex');
             }

@@ -14,6 +14,9 @@ import json
 import sqlite3
 from datetime import datetime
 import argparse
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 # Add support for components directory in templates
@@ -42,102 +45,79 @@ MODEL_SPECS = {
 }
 
 def check_ollama_status():
+    """Check if Ollama service is running and accessible"""
+    global OLLAMA_BASE_URL
+    
     try:
-        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags")
-        return response.status_code == 200
-    except:
-        return False
-
-def initialize_ollama_model(model_name):
-    """Initialize and pull the model if not already available"""
-    try:
-        # Check if model exists
-        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags")
-        if response.status_code == 200:
-            models = response.json().get('models', [])
-            model_exists = any(m['name'] == model_name for m in models)
-            
-            if not model_exists:
-                # Pull the model
-                response = requests.post(
-                    f"{OLLAMA_BASE_URL}/api/pull",
-                    json={"name": model_name}
-                )
-                if response.status_code != 200:
-                    raise Exception(f"Failed to pull model: {response.text}")
+        logger.info("Checking Ollama service status...")
         
-        # Warm up the model with a simple query
-        response = requests.post(
-            f"{OLLAMA_BASE_URL}/api/generate",
-            json={
-                "model": model_name,
-                "prompt": "Hello",
-                "stream": False
-            }
-        )
+        # First try HTTPS if we're running in HTTPS mode
+        if os.path.exists(os.path.join(os.path.dirname(__file__), 'ssl', 'cert.pem')):
+            try:
+                logger.info("Trying HTTPS connection to Ollama...")
+                response = requests.get("https://localhost:11434/api/tags", verify=False)
+                if response.status_code == 200:
+                    OLLAMA_BASE_URL = "https://localhost:11434"
+                    models = response.json().get('models', [])
+                    logger.info(f"Ollama service is running over HTTPS. Available models: {[m['name'] for m in models]}")
+                    return True, None
+            except Exception as e:
+                logger.warning(f"HTTPS connection failed: {str(e)}")
         
-        if response.status_code != 200:
-            raise Exception(f"Failed to initialize model: {response.text}")
-            
-        return True
+        # Fallback to HTTP
+        try:
+            logger.info("Trying HTTP connection to Ollama...")
+            response = requests.get("http://localhost:11434/api/tags")
+            if response.status_code == 200:
+                OLLAMA_BASE_URL = "http://localhost:11434"
+                models = response.json().get('models', [])
+                logger.info(f"Ollama service is running over HTTP. Available models: {[m['name'] for m in models]}")
+                return True, None
+            else:
+                error_msg = f"Ollama service returned status code {response.status_code}"
+                logger.error(error_msg)
+                return False, error_msg
+        except requests.exceptions.ConnectionError:
+            error_msg = "Could not connect to Ollama service. Is it running?"
+            logger.error(error_msg)
+            return False, error_msg
     except Exception as e:
-        raise Exception(f"Error initializing model: {str(e)}")
+        error_msg = f"Error checking Ollama status: {str(e)}"
+        logger.error(error_msg)
+        return False, error_msg
 
-def init_db():
-    """Initialize the SQLite database"""
-    conn = sqlite3.connect('chats.db')
-    c = conn.cursor()
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS chats
-        (id INTEGER PRIMARY KEY AUTOINCREMENT,
-         timestamp TEXT NOT NULL,
-         model TEXT NOT NULL,
-         query TEXT NOT NULL,
-         response TEXT NOT NULL)
-    ''')
-    conn.commit()
-    conn.close()
-
-def save_chat(model, query, response):
-    """Save a chat interaction to the database"""
-    conn = sqlite3.connect('chats.db')
-    c = conn.cursor()
-    c.execute('INSERT INTO chats (timestamp, model, query, response) VALUES (?, ?, ?, ?)',
-              (datetime.now().isoformat(), model, query, response))
-    conn.commit()
-    conn.close()
-
-def get_chat_history():
-    """Retrieve all chat history"""
-    conn = sqlite3.connect('chats.db')
-    c = conn.cursor()
-    c.execute('SELECT * FROM chats ORDER BY timestamp DESC')
-    chats = [{'id': row[0], 'timestamp': row[1], 'model': row[2], 
-              'query': row[3], 'response': row[4]} for row in c.fetchall()]
-    conn.close()
-    return chats
-
-def clear_chat_history():
-    """Clear all chat history"""
-    conn = sqlite3.connect('chats.db')
-    c = conn.cursor()
-    c.execute('DELETE FROM chats')
-    conn.commit()
-    conn.close()
-
-def get_db():
-    return sqlite3.connect('chats.db')
+def init_app():
+    logger.info("Initializing application...")
+    ollama_status, error = check_ollama_status()
+    if not ollama_status:
+        logger.error(f"Ollama service check failed: {error}")
+    return app
 
 @app.route('/')
 def index():
+    logger.info("Accessing landing page...")
+    ollama_status, error = check_ollama_status()
+    if not ollama_status:
+        logger.warning(f"Ollama service not available: {error}")
     # If a model is already selected and initialized, redirect to chat
     if 'model' in session:
         return redirect(url_for('chat'))
+    
+    try:    
+        ollama_running = check_ollama_status()[0]
+        logger.info(f"Ollama status: {'running' if ollama_running else 'not running'}")
         
-    ollama_running = check_ollama_status()
-    return render_template('landing.html', 
-                         models=MODEL_SPECS, 
-                         ollama_running=ollama_running)
+        cert_path = os.path.join(os.path.dirname(__file__), 'ssl', 'cert.pem')
+        key_path = os.path.join(os.path.dirname(__file__), 'ssl', 'key.pem')
+        logger.info(f"SSL cert exists: {os.path.exists(cert_path)}")
+        logger.info(f"SSL key exists: {os.path.exists(key_path)}")
+        
+        return render_template('landing.html', 
+                             models=MODEL_SPECS, 
+                             ollama_running=ollama_running)
+    except Exception as e:
+        logger.error(f"Error in index route: {str(e)}")
+        return f"Error loading page: {str(e)}", 500
 
 @app.route('/chat')
 def chat():
@@ -145,67 +125,77 @@ def chat():
     if 'model' not in session:
         return redirect(url_for('index'))
         
-    ollama_running = check_ollama_status()
+    ollama_running = check_ollama_status()[0]
     return render_template('chat.html',
                          selected_model=session['model'],
                          ollama_running=ollama_running)
 
 @app.route('/initialize_model', methods=['POST'])
 def initialize_model():
-    data = request.json
-    model = data.get('model')
-    
-    if not model:
-        return jsonify({"error": "No model specified"}), 400
-        
     try:
+        data = request.get_json()
+        model = data.get('model')
+        if not model:
+            return jsonify({'error': 'No model specified'}), 400
+
+        logger.info(f"Initializing model: {model}")
+        
+        # Check Ollama status first
+        ollama_status, error = check_ollama_status()
+        if not ollama_status:
+            return jsonify({'error': f'Ollama service not available: {error}'}), 503
+
         # Initialize the model
-        initialize_ollama_model(model)
-        
-        # Store the selected model in session
-        session['model'] = model
-        
-        return jsonify({"success": True})
+        if initialize_ollama_model(model):
+            session['model'] = model
+            return jsonify({'status': 'success'}), 200
+        else:
+            return jsonify({'error': 'Failed to initialize model'}), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logger.error(f"Error in initialize_model: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/query', methods=['POST'])
 def query():
-    data = request.get_json()
-    if not data or 'query' not in data:
-        return jsonify({'error': 'No query provided'}), 400
+    data = request.json
+    model = session.get('model')
+    user_input = data.get('query', '')
 
-    query_text = data['query']
-    model = session.get('model', 'default')
-    
-    def generate():
-        full_response = ''
-        try:
-            response = requests.post(
-                f"{OLLAMA_BASE_URL}/api/generate",
-                json={
-                    "model": model,
-                    "prompt": query_text,
-                    "stream": True
-                },
-                stream=True
-            )
-            
+    if not model:
+        return jsonify({"error": "No model selected"}), 400
+
+    if not user_input:
+        return jsonify({"error": "No query provided"}), 400
+
+    try:
+        response = requests.post(
+            f"{OLLAMA_BASE_URL}/api/generate",
+            json={
+                "model": model,
+                "prompt": user_input,
+                "stream": True
+            },
+            stream=True,
+            verify=False
+        )
+
+        def generate():
             for line in response.iter_lines():
                 if line:
-                    json_response = json.loads(line)
-                    if 'response' in json_response:
-                        chunk = json_response['response']
-                        full_response += chunk
-                        yield f"data: {json.dumps({'response': chunk})}\n\n"
-            
-            # After the stream is complete, save the chat
-            save_chat(model, query_text, full_response)
-            
-        except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-    
-    return Response(generate(), mimetype='text/event-stream')
+                    try:
+                        json_response = json.loads(line)
+                        if 'response' in json_response:
+                            yield f"data: {json.dumps({'text': json_response['response']})}\n\n"
+                        if json_response.get('done', False):
+                            # Save the complete chat to database
+                            save_chat(model, user_input, json_response.get('context', ''))
+                            break
+                    except json.JSONDecodeError:
+                        continue
+
+        return Response(generate(), mimetype='text/event-stream')
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/chat_history')
 def chat_history():
@@ -594,37 +584,207 @@ def get_local_ip():
     except:
         return "localhost"
 
-def main():
-    global OLLAMA_BASE_URL
-    global app
+def init_db():
+    """Initialize the SQLite database"""
+    conn = sqlite3.connect('chats.db')
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS chats
+        (id INTEGER PRIMARY KEY AUTOINCREMENT,
+         timestamp TEXT NOT NULL,
+         model TEXT NOT NULL,
+         query TEXT NOT NULL,
+         response TEXT NOT NULL)
+    ''')
+    conn.commit()
+    conn.close()
 
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Run the GURIA web interface')
-    parser.add_argument('--port', type=int, default=7860, help='Port to run the web interface on')
-    parser.add_argument('--host', type=str, default='http://localhost:11434', help='Ollama API host')
+def save_chat(model, query, response):
+    """Save a chat interaction to the database"""
+    conn = sqlite3.connect('chats.db')
+    c = conn.cursor()
+    c.execute('INSERT INTO chats (timestamp, model, query, response) VALUES (?, ?, ?, ?)',
+              (datetime.now().isoformat(), model, query, response))
+    conn.commit()
+    conn.close()
+
+def get_chat_history():
+    """Retrieve all chat history"""
+    conn = sqlite3.connect('chats.db')
+    c = conn.cursor()
+    c.execute('SELECT * FROM chats ORDER BY timestamp DESC')
+    chats = [{'id': row[0], 'timestamp': row[1], 'model': row[2], 
+              'query': row[3], 'response': row[4]} for row in c.fetchall()]
+    conn.close()
+    return chats
+
+def clear_chat_history():
+    """Clear all chat history"""
+    conn = sqlite3.connect('chats.db')
+    c = conn.cursor()
+    c.execute('DELETE FROM chats')
+    conn.commit()
+    conn.close()
+
+def get_db():
+    return sqlite3.connect('chats.db')
+
+def initialize_ollama_model(model_name):
+    """Initialize and pull the model if not already available"""
+    try:
+        # Check if model exists
+        response = requests.get(f"{OLLAMA_BASE_URL}/api/tags", verify=False)
+        if response.status_code == 200:
+            models = response.json().get('models', [])
+            model_exists = any(m['name'] == model_name for m in models)
+            
+            if not model_exists:
+                # Pull the model
+                response = requests.post(
+                    f"{OLLAMA_BASE_URL}/api/pull",
+                    json={"name": model_name},
+                    verify=False
+                )
+                if response.status_code != 200:
+                    raise Exception(f"Failed to pull model: {response.text}")
+        
+        # Warm up the model with a simple query
+        response = requests.post(
+            f"{OLLAMA_BASE_URL}/api/generate",
+            json={
+                "model": model_name,
+                "prompt": "Hello",
+                "stream": False
+            },
+            verify=False
+        )
+        
+        if response.status_code != 200:
+            raise Exception(f"Failed to initialize model: {response.text}")
+            
+        return True
+    except Exception as e:
+        raise Exception(f"Error initializing model: {str(e)}")
+
+def verify_ssl_certificates(cert_path, key_path):
+    """Verify that SSL certificates are valid"""
+    try:
+        import ssl
+        import datetime
+        
+        logger.info("Verifying SSL certificates...")
+        
+        # Check if files exist
+        if not os.path.exists(cert_path) or not os.path.exists(key_path):
+            logger.error("Certificate files don't exist")
+            return False
+            
+        # Try to create SSL context
+        context = ssl.create_default_context()
+        try:
+            context.load_cert_chain(cert_path, key_path)
+            logger.info("SSL certificates are valid")
+            return True
+        except ssl.SSLError as e:
+            logger.error(f"Invalid SSL certificates: {str(e)}")
+            return False
+    except Exception as e:
+        logger.error(f"Error verifying SSL certificates: {str(e)}")
+        return False
+
+def main():
+    parser = argparse.ArgumentParser(description='GURIA - Generative Understanding & Responsive Intelligent Assistant')
+    parser.add_argument('--port', type=int, default=7860, help='Port to run the server on')
+    parser.add_argument('--force-http', action='store_true', help='Force HTTP mode (not recommended)')
+    parser.add_argument('--debug', action='store_true', help='Enable debug mode (not recommended for production)')
     args = parser.parse_args()
 
-    OLLAMA_BASE_URL = args.host
-    port = args.port
+    # Set Flask environment
+    os.environ['FLASK_ENV'] = 'development' if args.debug else 'production'
+    app.debug = args.debug
+
+    # Initialize logging
+    logging.basicConfig(
+        level=logging.DEBUG if args.debug else logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+    # Initialize the application
+    init_app()
 
     # Initialize the database
     init_db()
 
-    # SSL certificate paths
+    # Check Ollama status before starting
+    logger.info("Checking Ollama service before startup...")
+    ollama_status, error = check_ollama_status()
+    if not ollama_status:
+        logger.warning(f"Warning: {error}")
+        logger.warning("GURIA will start, but AI features may not work until Ollama is running")
+    else:
+        logger.info("Ollama service is running")
+
+    # Check for SSL certificates
     cert_path = os.path.join(os.path.dirname(__file__), 'ssl', 'cert.pem')
     key_path = os.path.join(os.path.dirname(__file__), 'ssl', 'key.pem')
+    
+    ssl_context = None
+    if not args.force_http:
+        ssl_dir = os.path.dirname(cert_path)
+        if not os.path.exists(ssl_dir):
+            os.makedirs(ssl_dir, exist_ok=True)
+        
+        # Always try to generate new certificates
+        logger.info("Generating new SSL certificates...")
+        try:
+            # Remove old certificates if they exist
+            if os.path.exists(cert_path):
+                os.remove(cert_path)
+            if os.path.exists(key_path):
+                os.remove(key_path)
+            
+            # Generate new certificates
+            os.system('mkcert -install')
+            result = os.system(f'mkcert -cert-file {cert_path} -key-file {key_path} localhost 127.0.0.1 ::1')
+            
+            if result == 0 and verify_ssl_certificates(cert_path, key_path):
+                ssl_context = (cert_path, key_path)
+                logger.info("Successfully generated and verified SSL certificates")
+            else:
+                logger.error("Failed to generate valid SSL certificates")
+                logger.info("Falling back to HTTP mode")
+        except Exception as e:
+            logger.error(f"Error generating SSL certificates: {str(e)}")
+            logger.info("Falling back to HTTP mode")
+    
+    protocol = 'https' if ssl_context else 'http'
+    logger.info(f"Starting GURIA in {protocol.upper()} mode on port {args.port}")
+    print(f"\n Starting GURIA in {protocol.upper()} mode {'(debug enabled)' if args.debug else ''}")
+    print(f"   Access the application at: {protocol}://localhost:{args.port}\n")
 
-    # Check if SSL certificates exist
-    if os.path.exists(cert_path) and os.path.exists(key_path):
-        print("\n Starting GURIA with HTTPS support")
-        print("   Access the application at: https://localhost:" + str(port))
-        print("\n Note: If you see a security warning, check the README for browser-specific instructions.\n")
-        app.run(host='0.0.0.0', port=port, ssl_context=(cert_path, key_path))
+    if ssl_context:
+        print(" Note: If you see a security warning, check the README for browser-specific instructions.\n")
     else:
-        print("\n Warning: SSL certificates not found in the 'ssl' directory.")
-        print("   Please run the guria script again to generate certificates.")
-        print("   For now, running in HTTP mode (less secure).\n")
-        app.run(host='0.0.0.0', port=port)
+        print(" Note: Running in HTTP mode. This is less secure but suitable for local development.\n")
+
+    try:
+        # Clear any existing database lock
+        db_path = os.path.join(os.path.dirname(__file__), 'chats.db')
+        if os.path.exists(db_path + '-journal'):
+            logger.info("Removing stale database journal file")
+            os.remove(db_path + '-journal')
+        
+        app.run(
+            host='0.0.0.0',
+            port=args.port,
+            ssl_context=ssl_context,
+            debug=args.debug
+        )
+    except Exception as e:
+        logger.error(f"Error starting Flask app: {str(e)}")
+        if 'address already in use' in str(e).lower():
+            logger.error(f"Port {args.port} is already in use. Please free up the port and try again.")
+        raise
 
 if __name__ == '__main__':
     main()

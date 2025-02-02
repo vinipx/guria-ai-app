@@ -38,6 +38,9 @@ env/
 *.log
 .env
 
+# SSL certificates
+ssl/
+
 # OS specific
 .DS_Store
 Thumbs.db

@@ -114,6 +114,43 @@ guria-ai-app/
 └── README.md         # This file
 ```
 
+## Running the Application
+
+GURIA runs in production mode by default with HTTPS enabled. Here are the available options:
+
+```bash
+./guria.sh                     # Run in production mode with HTTPS
+./guria.sh --http             # Force HTTP mode
+./guria.sh --debug            # Enable debug mode
+./guria.sh --port 8443        # Use custom port
+```
+
+You can combine multiple options:
+```bash
+./guria.sh --http --debug --port 8080
+```
+
+For development and troubleshooting, you can enable debug mode with the `--debug` flag. However, debug mode should never be used in production as it may expose sensitive information.
+
+## HTTP vs HTTPS
+
+GURIA runs in HTTPS mode by default for enhanced security. The application will automatically generate and install SSL certificates using `mkcert` if they don't exist.
+
+If certificate generation fails or if you specifically need HTTP mode, you can force HTTP using the `--http` flag:
+
+```bash
+./guria.sh --http
+```
+
+You can also specify a custom port:
+
+```bash
+./guria.sh --port 8443  # Run with HTTPS on port 8443
+./guria.sh --http --port 8080  # Run with HTTP on port 8080
+```
+
+Note: When running in HTTPS mode for the first time, you might see a security warning in your browser. This is normal for locally-generated certificates and you can safely proceed.
+
 ## 👨‍💻 Authors
 
 Vinicius Peixoto Fagundes - [@vinipx](https://github.com/vinipx)
