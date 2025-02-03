@@ -9,6 +9,7 @@ import time
 import signal
 import subprocess
 import threading
+from threading import Thread
 import psutil
 import re
 from datetime import datetime
@@ -58,6 +59,10 @@ MODEL_SPECS = {
     "deepseek-r1:14b": {
         "ram": "32GB",
         "description": "Best performance, requires high-end hardware"
+    },
+    "deepseek-coder-v2": {
+        "ram": "16GB",
+        "description": "Specialized for code understanding and generation"
     }
 }
 
@@ -226,11 +231,17 @@ def initialize_model():
             return jsonify({'error': f'Ollama service not available: {error}'}), 503
 
         # Initialize the model
-        if initialize_ollama_model(model):
+        success = initialize_ollama_model(model)
+        if success:
             session['model'] = model
-            return jsonify({'status': 'success'}), 200
+            return jsonify({
+                'status': 'success',
+                'message': f'Model {model} initialized successfully'
+            }), 200
         else:
-            return jsonify({'error': 'Failed to initialize model'}), 500
+            return jsonify({
+                'error': f'Failed to initialize model {model}. Check server logs for details.'
+            }), 500
     except Exception as e:
         logger.error(f"Error in initialize_model: {str(e)}")
         return jsonify({'error': str(e)}), 500
@@ -707,22 +718,39 @@ def init_db():
 def initialize_ollama_model(model_name):
     """Initialize and pull the model if not already available"""
     try:
+        logger.info(f"Checking if model {model_name} is available...")
         # Check if model exists
         response = requests.get(f"{OLLAMA_BASE_URL}/api/tags")
-        if response.status_code == 200:
-            models = response.json().get('models', [])
-            model_exists = any(m['name'] == model_name for m in models)
+        if response.status_code != 200:
+            raise Exception(f"Failed to get model list: {response.text}")
             
-            if not model_exists:
-                # Pull the model
+        models = response.json().get('models', [])
+        model_exists = any(m['name'] == model_name for m in models)
+        
+        if not model_exists:
+            logger.info(f"Model {model_name} not found. Pulling from Ollama...")
+            try:
+                # Use subprocess to run ollama pull command
+                import subprocess
+                result = subprocess.run(['ollama', 'pull', model_name], 
+                                     capture_output=True, 
+                                     text=True)
+                if result.returncode != 0:
+                    raise Exception(f"Failed to pull model via CLI: {result.stderr}")
+                logger.info(f"Successfully pulled model {model_name}")
+            except subprocess.SubprocessError as e:
+                # Fallback to API if CLI fails
+                logger.warning(f"CLI pull failed, trying API: {str(e)}")
                 response = requests.post(
                     f"{OLLAMA_BASE_URL}/api/pull",
                     json={"name": model_name},
                 )
                 if response.status_code != 200:
-                    raise Exception(f"Failed to pull model: {response.text}")
+                    raise Exception(f"Failed to pull model via API: {response.text}")
+                logger.info(f"Successfully pulled model {model_name} via API")
         
         # Warm up the model with a simple query
+        logger.info(f"Warming up model {model_name}...")
         response = requests.post(
             f"{OLLAMA_BASE_URL}/api/generate",
             json={
@@ -735,9 +763,12 @@ def initialize_ollama_model(model_name):
         if response.status_code != 200:
             raise Exception(f"Failed to initialize model: {response.text}")
             
+        logger.info(f"Model {model_name} initialized successfully")
         return True
+        
     except Exception as e:
-        raise Exception(f"Error initializing model: {str(e)}")
+        logger.error(f"Error initializing model {model_name}: {str(e)}")
+        return False
 
 def verify_ssl_certificates(cert_path, key_path):
     """Verify that SSL certificates are valid"""
@@ -798,19 +829,31 @@ def generate_ssl_certificates(cert_path, key_path):
 def shutdown_server():
     """Helper function to shutdown the server"""
     try:
-        # Kill Ollama first
-        subprocess.run(['pkill', 'ollama'], check=False)
-        time.sleep(1)  # Give Ollama time to clean up
+        logger.info("Starting server shutdown sequence...")
         
-        # Then shutdown Flask
+        # Close database connections
+        if 'db' in g:
+            g.db.close()
+            logger.info("Database connection closed")
+        
+        # Kill Ollama if it's running
+        try:
+            subprocess.run(['pkill', 'ollama'], check=False)
+            time.sleep(1)  # Give Ollama time to clean up
+            logger.info("Ollama process terminated")
+        except Exception as e:
+            logger.warning(f"Error stopping Ollama: {str(e)}")
+        
+        # Shutdown Flask
         func = request.environ.get('werkzeug.server.shutdown')
         if func is None:
             raise RuntimeError('Not running with the Werkzeug Server')
+        logger.info("Shutting down Flask server...")
         func()
     except Exception as e:
         logger.error(f"Error during server shutdown: {str(e)}")
-        raise
-
+        # Don't raise the exception, just log it
+        
 @app.route('/goodbye')
 def goodbye():
     """Show goodbye page"""
@@ -820,16 +863,24 @@ def goodbye():
 def shutdown():
     """Handle server shutdown request"""
     try:
+        logger.info("Shutdown request received")
+        
         # Schedule the shutdown
         def delayed_shutdown():
             time.sleep(1)  # Give time for the response to be sent
             shutdown_server()
-
-        Thread(target=delayed_shutdown).start()
-        return jsonify({'status': 'success', 'message': 'Server is shutting down'}), 200
+        
+        Thread(target=delayed_shutdown, daemon=True).start()
+        return jsonify({
+            'status': 'success',
+            'message': 'Server is shutting down...'
+        }), 200
     except Exception as e:
         logger.error(f"Error during shutdown: {str(e)}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        return jsonify({
+            'status': 'error',
+            'message': f'Shutdown failed: {str(e)}'
+        }), 500
 
 # Global flag for shutdown
 shutdown_flag = False
@@ -855,8 +906,9 @@ def signal_handler(sig, frame):
                 print("Database connections closed")
         
         # Clean up any temporary files
-        db_path = os.path.join(os.path.dirname(__file__), 'guria.db')
+        db_path = os.path.join(os.path.dirname(__file__), 'chats.db')
         if os.path.exists(db_path + '-journal'):
+            logger.info("Removing stale database journal file")
             os.remove(db_path + '-journal')
             print("Temporary database files cleaned up")
             

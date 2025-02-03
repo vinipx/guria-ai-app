@@ -770,7 +770,7 @@
                     </button>
                     <button onclick="exportChat('md')">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0112.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0112.586 3H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
                         <span>Markdown (.md)</span>
                     </button>
@@ -789,27 +789,38 @@
             </div>
 
             <!-- Input area -->
-            <div class="border-t border-chat-border bg-chat-dark p-4">
-                <div class="max-w-4xl mx-auto">
-                    <div class="relative">
-                        <textarea 
-                            id="query" 
-                            class="w-full bg-chat-darker border border-chat-border text-gray-100 rounded-lg py-3 px-4 pr-24 focus:outline-none focus:ring-2 focus:ring-chat-accent focus:border-transparent transition-all resize-none"
-                            rows="3"
-                            placeholder="Send a message..."
-                        ></textarea>
-                        <button 
-                            id="submit" 
-                            class="absolute bottom-2 right-2 bg-chat-accent hover:bg-chat-accent-hover text-black font-medium p-2 rounded-lg transition-all flex items-center justify-center"
-                        >
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
-                            </svg>
-                        </button>
-                    </div>
+            <div class="p-4 border-t border-chat-border">
+                <div class="flex items-center space-x-2">
+                    <textarea
+                        id="query"
+                        class="flex-1 bg-chat-light text-gray-100 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-chat-accent resize-none"
+                        rows="1"
+                        placeholder="Type your message..."
+                    ></textarea>
+                    <button
+                        onclick="sendMessage()"
+                        class="bg-chat-accent hover:bg-chat-accent-hover text-black font-semibold py-2 px-4 rounded-lg transition-colors duration-200"
+                    >
+                        Send
+                    </button>
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Shutdown Modal -->
+    <div id="shutdownModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+        <div class="bg-chat-light p-6 rounded-lg shadow-xl">
+            <div class="flex flex-col items-center">
+                <svg class="animate-spin h-8 w-8 text-chat-accent mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p class="text-gray-100 text-lg font-semibold">Shutting down server...</p>
+                <p class="text-gray-400 mt-2">Please wait a moment</p>
+            </div>
+        </div>
+    </div>
 
     <script>
         let currentChatId = null;
@@ -819,28 +830,32 @@
         let thinkingContent = '';
 
         async function shutdownServer() {
-            // Show shutdown modal
-            document.getElementById('shutdownModal').classList.remove('hidden');
-            
             try {
+                // Show shutdown modal
+                document.getElementById('shutdownModal').classList.remove('hidden');
+                
                 const response = await fetch('/shutdown', {
-                    method: 'POST'
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
                 });
                 
                 if (response.ok) {
                     // Wait a moment for the server to start shutting down
                     setTimeout(() => {
                         window.location.href = '/goodbye';
-                    }, 1500);
+                    }, 1000);
                 } else {
-                    console.error('Failed to shutdown server');
-                    // Hide shutdown modal if there's an error
+                    const error = await response.json();
+                    console.error('Failed to shutdown server:', error);
                     document.getElementById('shutdownModal').classList.add('hidden');
+                    alert('Failed to shutdown server. Please try again.');
                 }
             } catch (error) {
                 console.error('Error during shutdown:', error);
-                // Hide shutdown modal if there's an error
                 document.getElementById('shutdownModal').classList.add('hidden');
+                alert('Error during shutdown. Please try again.');
             }
         }
 
