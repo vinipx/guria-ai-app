@@ -13,6 +13,26 @@
 
 ---
 
+## 📸 Screenshots
+
+<div align="center">
+
+### 🎯 Model Selection
+<img src="static/images/model-selection.png" alt="Model Selection" width="800"/>
+<p><i>Choose from a variety of powerful Ollama models</i></p>
+
+### 🚀 Model Initialization
+<img src="static/images/initializing-model.png" alt="Model Initialization" width="800"/>
+<p><i>Automatic model download and initialization</i></p>
+
+### 💬 Chat Interface
+<img src="static/images/chat-interface.png" alt="Chat Interface" width="800"/>
+<p><i>Modern, responsive chat interface with real-time streaming</i></p>
+
+</div>
+
+---
+
 ## 🌟 Features
 
 - 🎨 Modern, responsive UI with dark mode support
