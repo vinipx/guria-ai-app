@@ -1285,21 +1285,62 @@
         }
 
         // Handle Enter key to submit
-        document.getElementById('query').addEventListener('keypress', function(event) {
-            if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                sendMessage();
+        document.addEventListener('DOMContentLoaded', function() {
+            const queryInput = document.getElementById('query');
+            if (queryInput) {
+                queryInput.addEventListener('keypress', function(event) {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        sendMessage();
+                    }
+                });
             }
+
+            // Initialize clear history button
+            const clearHistoryBtn = document.getElementById('clear-history');
+            if (clearHistoryBtn) {
+                clearHistoryBtn.addEventListener('click', async function() {
+                    if (confirm('Are you sure you want to clear all chat history? This action cannot be undone.')) {
+                        try {
+                            const response = await fetch('/clear_history', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                }
+                            });
+                            
+                            const data = await response.json();
+                            if (data.status === 'success') {
+                                // Clear the chat history list
+                                document.getElementById('chat-history-list').innerHTML = '';
+                                // Clear the current chat messages
+                                document.getElementById('chat-messages').innerHTML = '';
+                                // Refresh the chat history
+                                refreshChatHistory();
+                            } else {
+                                alert('Failed to clear history: ' + (data.message || 'Unknown error'));
+                            }
+                        } catch (error) {
+                            console.error('Error clearing history:', error);
+                            alert('Failed to clear history. Please try again.');
+                        }
+                    }
+                });
+            }
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function(event) {
+                const dropdown = document.getElementById('exportDropdown');
+                const exportBtn = event.target.closest('.export-btn');
+                
+                if (!exportBtn && dropdown && !dropdown.contains(event.target)) {
+                    dropdown.classList.remove('show');
+                }
+            });
+
+            // Initial load of chat history
+            refreshChatHistory();
         });
-
-        // Handle form submission
-        document.getElementById('submit').addEventListener('click', sendMessage);
-
-        // Initial load of chat history
-        refreshChatHistory();
-
-        // Refresh chat history periodically
-        setInterval(refreshChatHistory, 5000);
 
         async function exportChat(format) {
             try {
