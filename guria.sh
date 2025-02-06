@@ -439,8 +439,17 @@ display_shutdown_message() {
     echo
 }
 
+# Function to handle graceful shutdown
+cleanup() {
+    display_shutdown_message
+    print_step "Stopping Ollama processes..."
+    ensure_ollama_stopped
+    print_success "Shutdown complete"
+    exit 0
+}
+
 # Trap SIGTERM and SIGINT
-trap 'display_shutdown_message' SIGTERM SIGINT
+trap 'cleanup' SIGTERM SIGINT
 
 # Get the directory where the script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
